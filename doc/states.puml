@@ -1,0 +1,14 @@
+@startuml
+
+[*] --> Init
+
+Init --> Calibrate : not calibrated
+Init --> Watering : already calibrated
+
+Calibrate --> Watering : calibration done
+
+Watering --> Measure : watering finished
+Measure --> Idle : measurement done
+Idle --> Watering : next cycle
+
+@enduml
