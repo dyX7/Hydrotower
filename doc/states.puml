@@ -1,14 +1,29 @@
 @startuml
 
-[*] --> Init
+state Idle : **entry:**\n*validate measurements\n*schedule watering timer (t1)
+state Error : **entry:**\n*revoke watering timer (t1)\n*disable/lock all outputs
+state Watering : **entry:**\n*schedule pump timer (t2)\n*enable pump\n**exit:**\n*disable pump
+state Calibrate {
+    Calibrate_pH : adjust pH sensor\nbased on webserver\ninput value
+    Calibrate_EC : adjust EC sensor\nbased on webserver\ninput value
+    [*] --> Calibrate_pH
+    Calibrate_pH --> Calibrate_EC
+    Calibrate_EC --> [*]
+}
+state Measure : **entry:**\n*schedule measurement timer (t3)\n*enable sensor processing\n**exit**\n*disable measurement
+state Regulate : **entry:**\n*schedule dose timers (t4-8)\n*enable dose pumps
+state Flush : **entry:**\n*schedule pump timer (t2)\n*enable pump\n**exit:**\n*disable pump
 
-Init --> Calibrate : not calibrated
-Init --> Watering : already calibrated
-
-Calibrate --> Watering : calibration done
-
-Watering --> Measure : watering finished
-Measure --> Idle : measurement done
-Idle --> Watering : next cycle
+[*] --> Idle
+Idle --> Error : error detected
+Error --> Idle : acknowledge error
+Calibrate --> Idle : calibration done
+Idle --> Calibrate : do recalibration
+Idle --> Watering : **t1** elapsed
+Watering --> Measure : **t2** elapsed
+Measure --> Regulate : **t3** elapsed &\n deviation detected
+Measure --> Idle : **t3** elapsed &\n within limits
+Regulate --> Flush : regulation\ncomplete
+Flush --> Idle : **t2** elapsed
 
 @enduml

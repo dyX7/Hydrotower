@@ -3,7 +3,6 @@
 #include <Arduino.h>
 #include <scheduler.hpp>
 
-// Forward declaration
 class fsm_t;
 
 // ---------------- Base State ----------------
@@ -33,12 +32,17 @@ public:
   bool calib_done = false;
   bool watering_done = false;
   bool measurement_done = false;
-  bool force_watering = false;
+  bool deviation_detected = false;
+  bool regulation_done = false;
+  bool flush_done = false;
+  bool error = false;
+  bool error_ack = false;
+
   bool force_idle = false;
+
   // ---- triggers ----
   void calibrated() { calib_done = true; }
   void watered() { watering_done = true; }
-  void measured() { measurement_done = true; }
 
   const char* stateName() const;
 
@@ -47,7 +51,7 @@ private:
   State *current = nullptr;
 };
 
-// ---------------- Concrete States ----------------
+// ---------------- States ----------------
 
 class InitState : public State {
 public:
@@ -61,8 +65,6 @@ public:
   void update(fsm_t &fsm) override;
 
 private:
-  int led1Task = -1;
-  int led2Task = -1;
 };
 
 class WateringState : public State {
@@ -76,16 +78,32 @@ public:
   void enter(fsm_t &fsm) override;
   void exit(fsm_t &fsm) override;
   void update(fsm_t &fsm) override;
+};
 
-private:
-  int processTask = -1;
-  int sensorTask = -1;
-  int triggerTask = -1;
+class RegulateState : public State {
+public:
+  void enter(fsm_t &fsm) override;
+  void exit(fsm_t &fsm) override;
+  void update(fsm_t &fsm) override;
+};
+
+class FlushState : public State {
+public:
+  void enter(fsm_t &fsm) override;
+  void exit(fsm_t &fsm) override;
+  void update(fsm_t &fsm) override;
+};
+
+class ErrorState : public State {
+public:
+  void enter(fsm_t &fsm) override;
+  void update(fsm_t &fsm) override;
 };
 
 class IdleState : public State {
 public:
   void enter(fsm_t &fsm) override;
+  void exit(fsm_t &fsm) override;
   void update(fsm_t &fsm) override;
 };
 
@@ -95,4 +113,7 @@ extern InitState STATE_INIT;
 extern CalibrateState STATE_CALIBRATE;
 extern WateringState STATE_WATERING;
 extern MeasureState STATE_MEASURE;
+extern RegulateState STATE_REGULATE;
+extern FlushState STATE_FLUSH;
+extern ErrorState STATE_ERROR;
 extern IdleState STATE_IDLE;

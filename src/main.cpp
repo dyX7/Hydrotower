@@ -145,21 +145,22 @@ void loop()
 {
   fsm.poll();
   scheduler.poll();
-  sensorProcess();
-
-if(system_cmd == CMD_WATER_ON)
+switch(system_cmd)
 {
-  system_cmd = CMD_NONE;
-  Serial.println("FSM -> WATER ON");
-  fsm.force_watering = true;
-  fsm.transitionTo(&STATE_WATERING);
+  case CMD_WATER_ON:
+  {
+    system_cmd = CMD_NONE;
+    web_log("Watering ENABLED");
+    fsm.transitionTo(&STATE_WATERING);
+    break;
+  }
+  case CMD_WATER_OFF:
+  {
+    system_cmd = CMD_NONE;
+    web_log("Watering DISABLED");
+    fsm.transitionTo(&STATE_IDLE);
+    break;
+  }
 }
 
-if(system_cmd == CMD_WATER_OFF)
-{
-  system_cmd = CMD_NONE;
-  Serial.println("FSM -> WATER OFF");
-  fsm.watering_done = true;
-  fsm.transitionTo(&STATE_IDLE);
-}
 }

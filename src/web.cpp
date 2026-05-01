@@ -356,12 +356,10 @@ server.on("/water", HTTP_GET, [](AsyncWebServerRequest *req)
   if(watering_active)
   {
     system_cmd = CMD_WATER_ON;
-    web_log("Watering ENABLED");
   }
   else
   {
     system_cmd = CMD_WATER_OFF;
-    web_log("Watering DISABLED");
   }
 
   req->send(200, "text/plain", watering_active ? "ON" : "OFF");

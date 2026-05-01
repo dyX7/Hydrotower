@@ -27,9 +27,9 @@ using TaskCallback = std::function<void()>;
 class scheduler_t {
 public:
   // returns task ID (-1 if failed)
-  int addTask(TaskCallback cb, Time t);
+  bool addTask(int &id, TaskCallback cb, Time t);
+  bool removeTask(int &id);
 
-  bool removeTask(int id);
   bool enableTask(int id);
   bool disableTask(int id);
   bool updateInterval(int id, Time t);

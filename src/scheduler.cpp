@@ -11,10 +11,10 @@ Time Time::days(uint64_t v)  { return Time{v * 24ULL * 60ULL * 60ULL * 1000000UL
 
 // ---------------- Scheduler ----------------
 
-int scheduler_t::addTask(TaskCallback cb, Time t) {
-  if (taskCount >= MAX_TASKS) return -1;
+bool scheduler_t::addTask(int &id, TaskCallback cb, Time t) {
+  if (taskCount >= MAX_TASKS) return false;
 
-  int id = nextId++;
+  id = nextId++;
 
   tasks[taskCount++] = {
     cb,
@@ -24,19 +24,27 @@ int scheduler_t::addTask(TaskCallback cb, Time t) {
     id
   };
 
-  return id;
+  return true;
 }
 
-bool scheduler_t::removeTask(int id) {
+bool scheduler_t::removeTask(int &id)  // pass by reference
+{
+  if (id == -1) return false;
+
   for (int i = 0; i < taskCount; i++) {
     if (tasks[i].id == id) {
+
       for (int j = i; j < taskCount - 1; j++) {
         tasks[j] = tasks[j + 1];
       }
+
       taskCount--;
+      id = -1; // 🔥 auto-invalidate
       return true;
     }
   }
+
+  id = -1; // also invalidate if not found
   return false;
 }
 

@@ -1,0 +1,25 @@
+@startuml
+
+actor user
+frame esp32{
+    node web_server
+    node hydrotower
+}
+frame outputs{
+    component main as "Main Pump"
+    component dose as "Dose Pumps\n*water\n*ph+\n*ph-\n*minerals A\n*minerals B"
+}
+
+frame inputs{
+    component analogs1 as "Analog Inputs\n(Regulator)\n*ph\n*ph temp\n*ec\n*ec temp"
+    component analogs2 as "Analog Inputs\n(Status)\n*main full\n*main empty\n*(opt.) water empty\n*(opt.) ph+ empty\n*(opt.) ph- empty\n*(opt.) minerals A empty\n*(opt.) minerals B empty"
+}
+
+user --> web_server
+web_server --> hydrotower
+hydrotower --> main
+hydrotower --> dose
+hydrotower <-- analogs1
+hydrotower <-- analogs2
+
+@enduml
