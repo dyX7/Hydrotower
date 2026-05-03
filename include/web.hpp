@@ -15,13 +15,21 @@ extern int pump_cycle_minutes;
 // shared command from web → main
 enum system_cmd_t {
   CMD_NONE,
+
   CMD_WATER_ON,
   CMD_WATER_OFF,
 
-  CMD_MEASURE,
-  CMD_REGULATE,
-  CMD_FLUSH,
-  CMD_CALIBRATE
+  CMD_MEASURE_ON,
+  CMD_MEASURE_OFF,
+
+  CMD_REGULATE_ON,
+  CMD_REGULATE_OFF,
+
+  CMD_FLUSH_ON,
+  CMD_FLUSH_OFF,
+
+  CMD_CALIBRATE_ON,
+  CMD_CALIBRATE_OFF
 };
 
 extern volatile system_cmd_t system_cmd;

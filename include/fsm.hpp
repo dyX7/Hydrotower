@@ -45,15 +45,8 @@ public:
   bool error = false;
   bool error_ack = false;
 
-  bool idle_done = false;
-  bool watering_done = false;
-  bool measure_done = false;
-  bool dose_done = false;
-  bool flush_done = false;
-
   const char* stateName() const;
 
-private:
   scheduler_t &_s;
   State *current = nullptr;
 };

@@ -18,9 +18,20 @@ bool apMode = false;
 int pump_on_minutes = 1;
 int pump_cycle_minutes = 10;
 
+// NEW timers
+int idle_minutes = 10;
+int watering_minutes = 5;
+int flush_minutes = 3;
+
 // ---------------- COMMAND BRIDGE ----------------
 volatile system_cmd_t system_cmd = CMD_NONE;
 bool watering_active = false;
+
+// NEW toggle states
+bool measure_active = false;
+bool regulate_active = false;
+bool flush_active = false;
+bool calibrate_active = false;
 
 // ---------------- DATA ----------------
 extern float ec, ph;
@@ -82,17 +93,40 @@ const char index_html[] PROGMEM = R"rawliteral(
 
 <style>
 body { font-family: Arial; text-align:center; }
-.tab { display:none; }
 button { padding:10px; margin:5px; }
+
+.tab { display:none; }
 
 .stateBox {
   font-size: 22px;
   font-weight: bold;
   padding: 10px;
   margin: 10px;
-  background: #222;
-  color: #0f0;
+  background: #ffffff;
+  color: rgb(65, 116, 65);
   display: inline-block;
+}
+
+.timerRow {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 8px;
+}
+
+.timerRow button {
+  width: 40px;
+  height: 40px;
+}
+
+.timerValue {
+  width: 80px;
+  text-align: center;
+  font-size: 18px;
+}
+
+.section {
+  margin-top: 20px;
 }
 </style>
 </head>
@@ -101,55 +135,102 @@ button { padding:10px; margin:5px; }
 
 <h2>ESP32 HydroTower</h2>
 
-<button onclick="show('status')">Status</button>
-<button onclick="show('control')">Control</button>
+<button onclick="showTab('main')">Control</button>
+<button onclick="showTab('monitor')">Monitoring</button>
 
-<div id="status" class="tab">
+<!-- ================= CONTROL TAB ================= -->
+<div id="main" class="tab">
 
-  <h3>Status</h3>
+<div class="stateBox" id="state">---</div><br>
 
-  <div class="stateBox" id="state">---</div><br>
+<div class="section">
+  <h3>Cycle Timers</h3>
 
-  EC: <span id="ec">0</span><br>
-  PH: <span id="ph">0</span><br>
+  <div class="timerRow">
+    <button onclick="changeVal('idle', 1)">+</button>
+    <input id="idle" class="timerValue" type="number" value="10">
+    <button onclick="changeVal('idle', -1)">-</button>
+  </div>
+  <div>Idle time (min)</div>
 
-  <canvas id="chart"></canvas>
+  <div class="timerRow">
+    <button onclick="changeVal('water', 1)">+</button>
+    <input id="water" class="timerValue" type="number" value="5">
+    <button onclick="changeVal('water', -1)">-</button>
+  </div>
+  <div>Watering time (min)</div>
 
-  <pre id="log" style="text-align:left;height:200px;overflow:auto;background:#111;color:#0f0;"></pre>
+  <div class="timerRow">
+    <button onclick="changeVal('flush', 1)">+</button>
+    <input id="flush" class="timerValue" type="number" value="3">
+    <button onclick="changeVal('flush', -1)">-</button>
+  </div>
+  <div>Flush time (min)</div>
+
+  <button onclick="save()">Save Timers</button>
 </div>
 
-<div id="control" class="tab">
-
-  <h3>Pump Control</h3>
-
-  Pump ON time (minutes):<br>
-  <input id="on" type="number"><br>
-
-  Cycle time (minutes):<br>
-  <input id="cycle" type="number"><br><br>
-
-  <button onclick="save()">Save</button><br><br>
-
-  <button id="waterBtn" onclick="toggleWater()">Watering: OFF</button>
-
+<div class="section">
   <h3>Manual Actions</h3>
+  <button id="waterBtn" onclick="toggle('/water','waterBtn')">Watering: OFF</button>
+  <button id="measureBtn" onclick="toggle('/measure','measureBtn')">Measure: OFF</button>
+  <button id="regulateBtn" onclick="toggle('/regulate','regulateBtn')">Regulate: OFF</button>
+  <button id="flushBtn" onclick="toggle('/flush','flushBtn')">Flush: OFF</button>
+  <button id="calibrateBtn" onclick="toggle('/calibrate','calibrateBtn')">Calibrate: OFF</button>
+</div>
 
-  <button onclick="cmd('/measure')">Measure</button>
-  <button onclick="cmd('/regulate')">Regulate</button>
-  <button onclick="cmd('/flush')">Flush</button>
-  <button onclick="cmd('/calibrate')">Calibrate</button>
+</div>
+
+<!-- ================= MONITOR TAB ================= -->
+<div id="monitor" class="tab">
+
+EC: <span id="ec">0</span><br>
+PH: <span id="ph">0</span><br>
+
+<canvas id="chart"></canvas>
+
+<pre id="log" style="text-align:left;height:200px;overflow:auto;background:#111;color:#0f0;"></pre>
 
 </div>
 
 <script>
 
-function show(t){
+function showTab(id){
   document.querySelectorAll('.tab').forEach(e=>e.style.display='none');
-  document.getElementById(t).style.display='block';
+  document.getElementById(id).style.display='block';
 }
 
-function cmd(url){
-  fetch(url);
+function toggle(url, btnId)
+{
+  fetch(url).then(r => r.text()).then(state => {
+    let btn = document.getElementById(btnId);
+
+    if(state === "ON")
+    {
+      btn.innerText = btn.innerText.split(":")[0] + ": ON";
+    }
+    else
+    {
+      btn.innerText = btn.innerText.split(":")[0] + ": OFF";
+    }
+  });
+}
+
+function changeVal(id, delta)
+{
+  let el = document.getElementById(id);
+  let v = parseInt(el.value) || 0;
+  v += delta;
+  if (v < 0) v = 0;
+  el.value = v;
+}
+
+async function save(){
+  let idle = document.getElementById('idle').value;
+  let water = document.getElementById('water').value;
+  let flush = document.getElementById('flush').value;
+
+  await fetch(`/set?idle=${idle}&water=${water}&flush=${flush}`);
 }
 
 let chart = new Chart(document.getElementById('chart'), {
@@ -178,34 +259,10 @@ async function updateLog(){
   document.getElementById('log').innerText = await r.text();
 }
 
-async function save(){
-  let on = document.getElementById('on').value;
-  let cycle = document.getElementById('cycle').value;
-  await fetch(`/set?on=${on}&cycle=${cycle}`);
-}
-
-function toggleWater()
-{
-  fetch('/water').then(r => r.text()).then(state => {
-    let btn = document.getElementById("waterBtn");
-
-    if(state === "ON")
-    {
-      btn.innerText = "Watering: ON";
-      btn.style.background = "green";
-    }
-    else
-    {
-      btn.innerText = "Watering: OFF";
-      btn.style.background = "red";
-    }
-  });
-}
-
 setInterval(update, 2000);
 setInterval(updateLog, 2000);
 
-show('status');
+showTab('main');
 
 </script>
 
@@ -219,7 +276,6 @@ show('status');
 void startAP()
 {
   apMode = true;
-
   WiFi.mode(WIFI_AP);
   WiFi.softAP("ESP32-Setup");
 
@@ -360,54 +416,56 @@ void setupRoutes()
 
   server.on("/set", HTTP_GET, [](AsyncWebServerRequest *req)
   {
-    if(req->hasParam("on"))
-      pump_on_minutes = req->getParam("on")->value().toInt();
+    if(req->hasParam("idle"))
+      idle_minutes = req->getParam("idle")->value().toInt();
 
-    if(req->hasParam("cycle"))
-      pump_cycle_minutes = req->getParam("cycle")->value().toInt();
+    if(req->hasParam("water"))
+      watering_minutes = req->getParam("water")->value().toInt();
 
+    if(req->hasParam("flush"))
+      flush_minutes = req->getParam("flush")->value().toInt();
+
+    web_log("Timers updated");
     req->send(200, "text/plain", "OK");
   });
 
+  // ===== toggle endpoints =====
   server.on("/water", HTTP_GET, [](AsyncWebServerRequest *req)
   {
     watering_active = !watering_active;
-
-    if(watering_active)
-      setCommand(CMD_WATER_ON, "WATER ON");
-    else
-      setCommand(CMD_WATER_OFF, "WATER OFF");
-
+    setCommand(watering_active ? CMD_WATER_ON : CMD_WATER_OFF, "WATER");
     req->send(200, "text/plain", watering_active ? "ON" : "OFF");
   });
 
   server.on("/measure", HTTP_GET, [](AsyncWebServerRequest *req)
   {
-    setCommand(CMD_MEASURE, "MEASURE");
-    req->send(200, "text/plain", "OK");
+    measure_active = !measure_active;
+    setCommand(measure_active ? CMD_MEASURE_ON : CMD_MEASURE_OFF, "MEASURE");
+    req->send(200, "text/plain", measure_active ? "ON" : "OFF");
   });
 
   server.on("/regulate", HTTP_GET, [](AsyncWebServerRequest *req)
   {
-    setCommand(CMD_REGULATE, "REGULATE");
-    req->send(200, "text/plain", "OK");
+    regulate_active = !regulate_active;
+    setCommand(regulate_active ? CMD_REGULATE_ON : CMD_REGULATE_OFF, "REGULATE");
+    req->send(200, "text/plain", regulate_active ? "ON" : "OFF");
   });
 
   server.on("/flush", HTTP_GET, [](AsyncWebServerRequest *req)
   {
-    setCommand(CMD_FLUSH, "FLUSH");
-    req->send(200, "text/plain", "OK");
+    flush_active = !flush_active;
+    setCommand(flush_active ? CMD_FLUSH_ON : CMD_FLUSH_OFF, "FLUSH");
+    req->send(200, "text/plain", flush_active ? "ON" : "OFF");
   });
 
   server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest *req)
   {
-    setCommand(CMD_CALIBRATE, "CALIBRATE");
-    req->send(200, "text/plain", "OK");
+    calibrate_active = !calibrate_active;
+    setCommand(calibrate_active ? CMD_CALIBRATE_ON : CMD_CALIBRATE_OFF, "CALIBRATE");
+    req->send(200, "text/plain", calibrate_active ? "ON" : "OFF");
   });
 }
 
-// ==================================================
-// INIT
 // ==================================================
 void web_init()
 {
@@ -416,9 +474,36 @@ void web_init()
   server.begin();
 }
 
-// ==================================================
-// LOOP
-// ==================================================
-void web_loop()
+void web_loop() 
 {
+  State* s = fsm.current;
+
+  if (s == &STATE_IDLE)
+  {
+    web_log("STATE: IDLE");
+  }
+  else if (s == &STATE_WATERING)
+  {
+    web_log("STATE: WATERING");
+  }
+  else if (s == &STATE_MEASURE)
+  {
+    web_log("STATE: MEASURE");
+  }
+  else if (s == &STATE_REGULATE)
+  {
+    web_log("STATE: REGULATE");
+  }
+  else if (s == &STATE_FLUSH)
+  {
+    web_log("STATE: FLUSH");
+  }
+  else if (s == &STATE_CALIBRATE)
+  {
+    web_log("STATE: CALIBRATE");
+  }
+  else
+  {
+    web_log("STATE: UNKNOWN");
+  }
 }
