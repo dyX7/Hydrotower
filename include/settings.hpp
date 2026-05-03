@@ -1,21 +1,20 @@
 #pragma once
 #include "pin.hpp"
 
-// ---------------- Pins ----------------
+// ------------ GPIO Pins ----------------
 extern const pin_t pinLed2;
 extern const pin_t pinLed1;
-
-extern const pin_t pinPwmEcMeasure;
-extern const pin_t pinPwmEc2;
-extern const pin_t pinPwmPhMeasure;
-extern const pin_t pinPwmPh2;
-
+extern const pin_t gpioEc1;
+extern const pin_t gpioEc2;
+extern const pin_t gpioPh1;
+extern const pin_t gpioPh2;
 extern const pin_t pinPwmMot1;
 extern const pin_t pinPwmMot2;
 extern const pin_t pinPwmMot3;
 extern const pin_t pinPwmMot4;
 extern const pin_t pinPwmMot5;
 
+// ----------- Analog Pins ----------------
 extern const pin_t adcEc;
 extern const pin_t adcPh;
 extern const pin_t adcEcTemp;
@@ -25,11 +24,10 @@ extern const pin_t adcPhTemp;
 extern gpio_out_t led1;
 extern gpio_out_t led2;
 
-extern gpio_out_t pwmEcMeasure;
-extern gpio_out_t pwmEcLow;
-extern gpio_out_t pwmPhMeasure;
-extern gpio_out_t pwmPhLow;
-
+extern gpio_out_t gpioEcMeasure1;
+extern gpio_out_t gpioEcMeasure2;
+extern gpio_out_t gpioPhMeasure1;
+extern gpio_out_t gpioPhMeasure2;
 extern gpio_out_t pwmMotor1;
 extern gpio_out_t pwmMotor2;
 extern gpio_out_t pwmMotor3;

@@ -1,34 +1,44 @@
 #include "settings.hpp"
 
-// ---------------- Pins ----------------
-const pin_t pinLed2         {23,  "LED2"};
-const pin_t pinLed1         {22,  "LED1"};
+// ------------ Avoid Pins ----------------
+// GPIO 1 (TX0)
+// GPIO 3 (RX0)
+// GPIO 0 (BOOT)
+// GPIO 2 (BOOT)
+// GPIO 4 (BOOT)
+// GPIO 5 (BOOT)
+// GPIO 12 (BOOT)
+// GPIO 15 (BOOT)
 
-const pin_t pinPwmEcMeasure {0,   "EC1_PWM"};
-const pin_t pinPwmEc2       {2,   "EC2_PWM"};
-const pin_t pinPwmPhMeasure {0,   "PH1_PWM"};
-const pin_t pinPwmPh2       {2,   "PH2_PWM"};
+// ------------ GPIO Pins ----------------
+const pin_t pinLed2     {23, "LED2"};
+const pin_t pinLed1     {22, "LED1"};
+const pin_t gpioEc1     {25, "EC1_PWM"};
+const pin_t gpioEc2     {26, "EC2_PWM"};
+const pin_t gpioPh1     {27, "PH1_PWM"};
+const pin_t gpioPh2     {14, "PH2_PWM"};
+const pin_t pinPwmMot1  {12, "MOT_MAIN"};
+const pin_t pinPwmMot2  {13, "MOT_PH+"};
+const pin_t pinPwmMot3  {9,  "MOT_PH-"};
+const pin_t pinPwmMot4  {10, "MOT_DOSE_A"};
+const pin_t pinPwmMot5  {21, "MOT_DOSE_B"};
 
-const pin_t pinPwmMot1      {0,   "MOT_MAIN"};
-const pin_t pinPwmMot2      {0,   "MOT_PH+"};
-const pin_t pinPwmMot3      {0,   "MOT_PH-"};
-const pin_t pinPwmMot4      {0,   "MOT_DOSE_A"};
-const pin_t pinPwmMot5      {0,   "MOT_DOSE_B"};
-
-const pin_t adcEc           {0,   "EC"};
-const pin_t adcPh           {0,   "PH"};
-const pin_t adcEcTemp       {0,   "EC_T"};
-const pin_t adcPhTemp       {0,   "PH_T"};
+// ----------- Analog Pins ----------------
+const pin_t adcEc       {36, "EC"};    // ADC1 Channel 0
+const pin_t adcPh       {39, "PH"};    // ADC1 Channel 3
+const pin_t adcEcTemp   {34, "EC_T"};  // ADC1 Channel 6
+const pin_t adcPhTemp   {35, "PH_T"};  // ADC1 Channel 7
+// const pin_t        {32, ""};  // ADC1 Channel 4
+// const pin_t        {33, ""};  // ADC1 Channel 5
 
 // ---------------- GPIO ----------------
-gpio_out_t led1{pinLed1, true};
-gpio_out_t led2{pinLed2, true};
+gpio_out_t led1{pinLed1};
+gpio_out_t led2{pinLed2};
 
-gpio_out_t pwmEcMeasure{pinPwmEcMeasure};
-gpio_out_t pwmEcLow{pinPwmEc2};
-gpio_out_t pwmPhMeasure{pinPwmPhMeasure};
-gpio_out_t pwmPhLow{pinPwmPh2};
-
+gpio_out_t gpioEcMeasure1{gpioEc1};
+gpio_out_t gpioEcMeasure2{gpioEc2};
+gpio_out_t gpioPhMeasure1{gpioPh1};
+gpio_out_t gpioPhMeasure2{gpioPh2};
 gpio_out_t pwmMotor1{pinPwmMot1};
 gpio_out_t pwmMotor2{pinPwmMot2};
 gpio_out_t pwmMotor3{pinPwmMot3};

@@ -4,7 +4,6 @@
 #include <functional>
 #include <settings.hpp>
 
-
 // ---------------- Time Units ----------------
 
 struct Time {
@@ -18,32 +17,43 @@ struct Time {
   static Time days(uint64_t v);
 };
 
+// ---------------- Task Handle ----------------
+
+struct task_t {
+  int id;
+  const char* name;
+
+  task_t(const char* n = "", int i = -1) : id(i), name(n) {}
+};
+
 // ---------------- Scheduler ----------------
 
-#define MAX_TASKS 10
+#define MAX_TASKS 20
 
 using TaskCallback = std::function<void()>;
 
 class scheduler_t {
 public:
-  // returns task ID (-1 if failed)
-  bool addTask(int &id, TaskCallback cb, Time t);
-  bool removeTask(int &id);
-
-  bool enableTask(int id);
-  bool disableTask(int id);
-  bool updateInterval(int id, Time t);
-
+  bool addTask(task_t &task, TaskCallback cb, Time t, TaskCallback stopCb = nullptr);
+  bool removeTask(task_t &task);
+  bool startTask(task_t &task);
+  bool stopTask(task_t &task);
+  bool setInterval(task_t &task, Time t);
+  bool setHandler(task_t &task, TaskCallback cb);
+  bool setStopHandler(task_t &task, TaskCallback cb);
+  
   void poll();
 
 private:
-  struct Task {
-    TaskCallback callback;
-    uint64_t interval;
-    uint64_t lastRun;
-    bool active;
-    int id;
-  };
+struct Task {
+  TaskCallback callback;
+  TaskCallback stopCallback;
+  uint64_t interval;
+  uint64_t lastRun;
+  bool active;
+  int id;
+  const char* name;
+};
 
   Task tasks[MAX_TASKS];
   int taskCount = 0;

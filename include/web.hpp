@@ -16,7 +16,12 @@ extern int pump_cycle_minutes;
 enum system_cmd_t {
   CMD_NONE,
   CMD_WATER_ON,
-  CMD_WATER_OFF
+  CMD_WATER_OFF,
+
+  CMD_MEASURE,
+  CMD_REGULATE,
+  CMD_FLUSH,
+  CMD_CALIBRATE
 };
 
 extern volatile system_cmd_t system_cmd;

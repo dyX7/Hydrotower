@@ -9,10 +9,17 @@ class fsm_t;
 
 class State {
 public:
-  virtual void enter(fsm_t &fsm) {}
+  void onEnter(fsm_t &fsm)
+  {
+    done = false;
+    enter(fsm);
+  }
   virtual void update(fsm_t &fsm) = 0;
   virtual void exit(fsm_t &fsm) {}
   virtual ~State() = default;
+  
+  virtual void enter(fsm_t &fsm) {}
+  bool done = false;
 };
 
 // ---------------- FSM ----------------
@@ -25,24 +32,24 @@ public:
   void begin(State *initial);
   void poll();
   void transitionTo(State *next);
+  void setDone() {
+    if (current) {
+      current->done = true;
+    }
+  }
 
   scheduler_t &scheduler() { return _s; }
 
   // ---- flags ----
-  bool calib_done = false;
-  bool watering_done = false;
-  bool measurement_done = false;
-  bool deviation_detected = false;
-  bool regulation_done = false;
-  bool flush_done = false;
+  bool deviation_detected = true;
   bool error = false;
   bool error_ack = false;
 
-  bool force_idle = false;
-
-  // ---- triggers ----
-  void calibrated() { calib_done = true; }
-  void watered() { watering_done = true; }
+  bool idle_done = false;
+  bool watering_done = false;
+  bool measure_done = false;
+  bool dose_done = false;
+  bool flush_done = false;
 
   const char* stateName() const;
 
@@ -55,57 +62,61 @@ private:
 
 class InitState : public State {
 public:
+  void enter(fsm_t &fsm);
   void update(fsm_t &fsm) override;
 };
 
-class CalibrateState : public State {
+class IdleState : public State {
 public:
-  void enter(fsm_t &fsm) override;
+  void enter(fsm_t &fsm);
   void exit(fsm_t &fsm) override;
   void update(fsm_t &fsm) override;
-
-private:
 };
 
 class WateringState : public State {
 public:
-  void enter(fsm_t &fsm) override;
+  void enter(fsm_t &fsm);
+  void exit(fsm_t &fsm) override;
   void update(fsm_t &fsm) override;
 };
 
 class MeasureState : public State {
 public:
-  void enter(fsm_t &fsm) override;
+  void enter(fsm_t &fsm);
   void exit(fsm_t &fsm) override;
   void update(fsm_t &fsm) override;
 };
 
 class RegulateState : public State {
 public:
-  void enter(fsm_t &fsm) override;
+  void enter(fsm_t &fsm);
   void exit(fsm_t &fsm) override;
   void update(fsm_t &fsm) override;
 };
 
 class FlushState : public State {
 public:
-  void enter(fsm_t &fsm) override;
+  void enter(fsm_t &fsm);
   void exit(fsm_t &fsm) override;
   void update(fsm_t &fsm) override;
+};
+
+class CalibrateState : public State {
+public:
+  void enter(fsm_t &fsm);
+  void exit(fsm_t &fsm) override;
+  void update(fsm_t &fsm) override;
+
+private:
 };
 
 class ErrorState : public State {
 public:
-  void enter(fsm_t &fsm) override;
-  void update(fsm_t &fsm) override;
-};
-
-class IdleState : public State {
-public:
-  void enter(fsm_t &fsm) override;
+  void enter(fsm_t &fsm);
   void exit(fsm_t &fsm) override;
   void update(fsm_t &fsm) override;
 };
+
 
 // ---------------- Instances ----------------
 

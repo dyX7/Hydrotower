@@ -63,11 +63,21 @@ void toggleLed1()
   state = !state;
 }
 
+void disableLed1() 
+{
+  led1.set(false);
+}
+
 void toggleLed2() 
 {
   static bool state = false;
   led2.set(state);
   state = !state;
+}
+
+void disableLed2() 
+{
+  led2.set(false);
 }
 
 // ---------------- Sensor Process ----------------
@@ -83,10 +93,15 @@ void sensorProcess()
     case CONTROL:
     {
       polarity = !polarity;
-      pwmEcMeasure.set(!polarity);
-      pwmPhMeasure.set(!polarity);
-      pwmEcLow.set(polarity);
-      pwmPhLow.set(polarity);
+    
+      // Ec control
+      gpioEcMeasure1.set(!polarity);
+      gpioEcMeasure2.set(polarity);
+
+      // Ph control
+      gpioPhMeasure1.set(!polarity);
+      gpioPhMeasure2.set(polarity);
+      
       phase = WAIT;
       break;
     }
@@ -110,8 +125,8 @@ void sensorProcess()
 
         web_add_data(ec, ph);
 
-        Serial.print("EC: "); Serial.print(ec);
-        Serial.print(" | PH: "); Serial.println(ph);
+        // Serial.print("EC: "); Serial.print(ec);
+        // Serial.print(" | PH: "); Serial.println(ph);
       }
 
       phase = CONTROL;
@@ -145,22 +160,53 @@ void loop()
 {
   fsm.poll();
   scheduler.poll();
-switch(system_cmd)
-{
-  case CMD_WATER_ON:
+
+  // handle web commands
+  switch(system_cmd)
   {
-    system_cmd = CMD_NONE;
-    web_log("Watering ENABLED");
-    fsm.transitionTo(&STATE_WATERING);
-    break;
-  }
-  case CMD_WATER_OFF:
-  {
-    system_cmd = CMD_NONE;
-    web_log("Watering DISABLED");
-    fsm.transitionTo(&STATE_IDLE);
-    break;
-  }
+    case CMD_WATER_ON:
+    {
+      system_cmd = CMD_NONE;
+      web_log("Watering ENABLED");
+      fsm.transitionTo(&STATE_WATERING);
+      break;
+    }
+    case CMD_WATER_OFF:
+    {
+      system_cmd = CMD_NONE;
+      web_log("Watering DISABLED");
+      fsm.transitionTo(&STATE_IDLE);
+      break;
+    }
+    case CMD_MEASURE:
+    {
+      system_cmd = CMD_NONE;
+      web_log("Manual MEASURE");
+      fsm.transitionTo(&STATE_MEASURE);
+      break;
+    }
+    case CMD_REGULATE:
+    {
+      system_cmd = CMD_NONE;
+      web_log("Manual REGULATE");
+      fsm.transitionTo(&STATE_REGULATE);
+      break;
+    }
+    case CMD_FLUSH:
+    {
+      system_cmd = CMD_NONE;
+      web_log("Manual FLUSH");
+      fsm.transitionTo(&STATE_FLUSH);
+      break;
+    }
+    case CMD_CALIBRATE:
+    {
+      system_cmd = CMD_NONE;
+      web_log("Manual CALIBRATE");
+      fsm.transitionTo(&STATE_CALIBRATE);
+      break;
+    }
+
 }
 
 }

@@ -9,6 +9,7 @@
 AsyncWebServer server(80);
 Preferences prefs;
 
+// ---------------- WiFi ----------------
 String ssid;
 String password;
 bool apMode = false;
@@ -61,7 +62,16 @@ void web_add_data(float ec_v, float ph_v)
 }
 
 // ==================================================
-// HTML (FULL RESTORED + WATER BUTTON)
+// COMMAND HELPERS
+// ==================================================
+void setCommand(system_cmd_t cmd, const String& name)
+{
+  system_cmd = cmd;
+  web_log(String("CMD ") + name);
+}
+
+// ==================================================
+// HTML
 // ==================================================
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
@@ -122,6 +132,13 @@ button { padding:10px; margin:5px; }
 
   <button id="waterBtn" onclick="toggleWater()">Watering: OFF</button>
 
+  <h3>Manual Actions</h3>
+
+  <button onclick="cmd('/measure')">Measure</button>
+  <button onclick="cmd('/regulate')">Regulate</button>
+  <button onclick="cmd('/flush')">Flush</button>
+  <button onclick="cmd('/calibrate')">Calibrate</button>
+
 </div>
 
 <script>
@@ -129,6 +146,10 @@ button { padding:10px; margin:5px; }
 function show(t){
   document.querySelectorAll('.tab').forEach(e=>e.style.display='none');
   document.getElementById(t).style.display='block';
+}
+
+function cmd(url){
+  fetch(url);
 }
 
 let chart = new Chart(document.getElementById('chart'), {
@@ -193,7 +214,7 @@ show('status');
 )rawliteral";
 
 // ==================================================
-// WIFI + AP MODE (RESTORED)
+// WIFI + AP MODE
 // ==================================================
 void startAP()
 {
@@ -230,7 +251,7 @@ void startAP()
 }
 
 // ==================================================
-// WIFI CONNECT + mDNS (RESTORED)
+// WIFI CONNECT
 // ==================================================
 void connectWiFi()
 {
@@ -262,7 +283,6 @@ void connectWiFi()
     if(MDNS.begin("hydrotower1"))
     {
       MDNS.addService("http", "tcp", 80);
-      Serial.println("http://hydrotower1.local");
     }
   }
   else
@@ -272,7 +292,7 @@ void connectWiFi()
 }
 
 // ==================================================
-// JSON (FULL RESTORED)
+// JSON
 // ==================================================
 String buildJson()
 {
@@ -310,7 +330,7 @@ String buildJson()
 }
 
 // ==================================================
-// ROUTES (RESTORED + COMMAND BRIDGE)
+// ROUTES
 // ==================================================
 void setupRoutes()
 {
@@ -349,21 +369,41 @@ void setupRoutes()
     req->send(200, "text/plain", "OK");
   });
 
-server.on("/water", HTTP_GET, [](AsyncWebServerRequest *req)
-{
-  watering_active = !watering_active;
-
-  if(watering_active)
+  server.on("/water", HTTP_GET, [](AsyncWebServerRequest *req)
   {
-    system_cmd = CMD_WATER_ON;
-  }
-  else
-  {
-    system_cmd = CMD_WATER_OFF;
-  }
+    watering_active = !watering_active;
 
-  req->send(200, "text/plain", watering_active ? "ON" : "OFF");
-});
+    if(watering_active)
+      setCommand(CMD_WATER_ON, "WATER ON");
+    else
+      setCommand(CMD_WATER_OFF, "WATER OFF");
+
+    req->send(200, "text/plain", watering_active ? "ON" : "OFF");
+  });
+
+  server.on("/measure", HTTP_GET, [](AsyncWebServerRequest *req)
+  {
+    setCommand(CMD_MEASURE, "MEASURE");
+    req->send(200, "text/plain", "OK");
+  });
+
+  server.on("/regulate", HTTP_GET, [](AsyncWebServerRequest *req)
+  {
+    setCommand(CMD_REGULATE, "REGULATE");
+    req->send(200, "text/plain", "OK");
+  });
+
+  server.on("/flush", HTTP_GET, [](AsyncWebServerRequest *req)
+  {
+    setCommand(CMD_FLUSH, "FLUSH");
+    req->send(200, "text/plain", "OK");
+  });
+
+  server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest *req)
+  {
+    setCommand(CMD_CALIBRATE, "CALIBRATE");
+    req->send(200, "text/plain", "OK");
+  });
 }
 
 // ==================================================
@@ -377,12 +417,8 @@ void web_init()
 }
 
 // ==================================================
-// LOOP (manual trigger logging optional)
+// LOOP
 // ==================================================
 void web_loop()
 {
-  if(system_cmd == CMD_WATER_ON)
-  {
-    web_log("Manual watering triggered");
-  }
 }
