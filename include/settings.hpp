@@ -14,6 +14,14 @@ extern const pin_t pinPwmMot3;
 extern const pin_t pinPwmMot4;
 extern const pin_t pinPwmMot5;
 
+extern uint8_t img_test[];
+extern const char img_idle[];
+extern const char img_water[];
+extern const char img_measure[];
+extern const char img_regulate[];
+extern const char img_flush[];
+extern const char img_calibrate[];
+
 // ----------- Analog Pins ----------------
 extern const pin_t adcEc;
 extern const pin_t adcPh;

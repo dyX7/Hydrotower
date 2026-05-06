@@ -21,6 +21,7 @@ struct Time {
 
 struct task_t {
   int id;
+  int index;
   const char* name;
 
   task_t(const char* n = "", int i = -1) : id(i), name(n) {}
@@ -34,6 +35,9 @@ using TaskCallback = std::function<void()>;
 
 class scheduler_t {
 public:
+  uint32_t getRemainingTime(task_t &task);
+  bool nextSecond();
+
   bool addTask(task_t &task, TaskCallback cb, Time t, TaskCallback stopCb = nullptr);
   bool removeTask(task_t &task);
   bool startTask(task_t &task);
@@ -58,4 +62,7 @@ struct Task {
   Task tasks[MAX_TASKS];
   int taskCount = 0;
   int nextId = 1;
+  int64_t lastSecondTick = 0; 
 };
+
+

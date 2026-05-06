@@ -7,6 +7,10 @@ class fsm_t;
 
 // ---------------- Base State ----------------
 
+extern int cylce_time_minutes;
+extern int watering_minutes;
+extern int flush_minutes;
+
 class State {
 public:
   void onEnter(fsm_t &fsm)
@@ -103,7 +107,7 @@ public:
 private:
 };
 
-class ErrorState : public State {
+class StopState : public State {
 public:
   void enter(fsm_t &fsm);
   void exit(fsm_t &fsm) override;
@@ -119,5 +123,5 @@ extern WateringState STATE_WATERING;
 extern MeasureState STATE_MEASURE;
 extern RegulateState STATE_REGULATE;
 extern FlushState STATE_FLUSH;
-extern ErrorState STATE_ERROR;
+extern StopState STATE_STOP;
 extern IdleState STATE_IDLE;

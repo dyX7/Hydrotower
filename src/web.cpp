@@ -5,6 +5,7 @@
 #include <Preferences.h>
 #include <ESPmDNS.h>
 #include <fsm.hpp>
+#include <time.h>
 
 AsyncWebServer server(80);
 Preferences prefs;
@@ -19,24 +20,19 @@ int pump_on_minutes = 1;
 int pump_cycle_minutes = 10;
 
 // NEW timers
-int idle_minutes = 10;
+int cylce_time_minutes = 10;
 int watering_minutes = 5;
 int flush_minutes = 3;
 
 // ---------------- COMMAND BRIDGE ----------------
 volatile system_cmd_t system_cmd = CMD_NONE;
-bool watering_active = false;
-
-// NEW toggle states
-bool measure_active = false;
-bool regulate_active = false;
-bool flush_active = false;
-bool calibrate_active = false;
 
 // ---------------- DATA ----------------
 extern float ec, ph;
 extern float ecTemp, phTemp;
 extern fsm_t fsm;
+extern uint32_t remaining_seconds;
+
 
 // ---------------- LOG ----------------
 #define LOG_SIZE 40
@@ -92,31 +88,32 @@ const char index_html[] PROGMEM = R"rawliteral(
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body { font-family: Arial; text-align:center; }
+body {
+  font-family: Arial;
+  text-align: center;
+  background-color: #e9fbea;
+  margin: 0;
+  padding-top: 50px;
+}
 button { padding:10px; margin:5px; }
 
 .tab { display:none; }
 
-.stateBox {
-  font-size: 22px;
-  font-weight: bold;
-  padding: 10px;
-  margin: 10px;
-  background: #ffffff;
-  color: rgb(65, 116, 65);
-  display: inline-block;
+#main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .timerRow {
   display: flex;
-  justify-content: center;
   align-items: center;
-  margin: 8px;
-}
-
-.timerRow button {
-  width: 40px;
-  height: 40px;
+  justify-content: center;
+  width: 50%;
+  margin: 8px auto;
+  gap: 10px;
 }
 
 .timerValue {
@@ -127,69 +124,139 @@ button { padding:10px; margin:5px; }
 
 .section {
   margin-top: 20px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
+
+#chart {
+  width: 300px !important;
+  height: 200px !important;
+  margin: auto;
+}
+
+.timerLabel {
+  width: 120px;
+  text-align: right;
+  margin-right: 10px;
+}
+
+#chartEC, #chartPH {
+  width: 300px !important;
+  height: 200px !important;
+  margin: 10px auto;
+  display: block;
+}
+
+.dataBlock {
+  margin-top: 10px;
+  font-size: 18px;
+  text-align: center;
+}
+
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.topBar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  box-sizing: border-box;
+  background-color: #e9fbea;
+}
+
 </style>
 </head>
 
 <body>
 
-<h2>ESP32 HydroTower</h2>
+<div class="topBar">
+  <div class="title">HydroTower</div>
+  <div id="time">--</div>
+</div>
 
 <button onclick="showTab('main')">Control</button>
-<button onclick="showTab('monitor')">Monitoring</button>
+<button onclick="showTab('graph')">Graph</button>
+<button onclick="showTab('monitor')">Log</button>
 
 <!-- ================= CONTROL TAB ================= -->
-<div id="main" class="tab">
 
-<div class="stateBox" id="state">---</div><br>
+<div id="main" class="tab">
+  <div class="dashboard">
+
+    <div class="stateBox">
+      <div id="state">---</div>
+      <div><span id="timer">0</span> s</div>
+    </div>
+
+    <div class="dataBlock">
+      <div>EC: <span id="ec">0</span></div>
+      <div>PH: <span id="ph">0</span></div>
+    </div>
+
 
 <div class="section">
-  <h3>Cycle Timers</h3>
 
-  <div class="timerRow">
-    <button onclick="changeVal('idle', 1)">+</button>
-    <input id="idle" class="timerValue" type="number" value="10">
-    <button onclick="changeVal('idle', -1)">-</button>
-  </div>
-  <div>Idle time (min)</div>
+<div class="timerRow">
+  <div class="timerLabel">Cycle</div>
+  <input id="idle" class="timerValue" type="number" min="0">
+  <span>min</span>
+</div>
 
-  <div class="timerRow">
-    <button onclick="changeVal('water', 1)">+</button>
-    <input id="water" class="timerValue" type="number" value="5">
-    <button onclick="changeVal('water', -1)">-</button>
-  </div>
-  <div>Watering time (min)</div>
+<div class="timerRow">
+  <div class="timerLabel">Water</div>
+  <input id="water" class="timerValue" type="number" min="0">
+  <span>min</span>
+</div>
 
-  <div class="timerRow">
-    <button onclick="changeVal('flush', 1)">+</button>
-    <input id="flush" class="timerValue" type="number" value="3">
-    <button onclick="changeVal('flush', -1)">-</button>
-  </div>
-  <div>Flush time (min)</div>
+<div class="timerRow">
+  <div class="timerLabel">Flush</div>
+  <input id="flush" class="timerValue" type="number" min="0">
+  <span>min</span>
+</div>
 
   <button onclick="save()">Save Timers</button>
 </div>
 
 <div class="section">
-  <h3>Manual Actions</h3>
-  <button id="waterBtn" onclick="toggle('/water','waterBtn')">Watering: OFF</button>
-  <button id="measureBtn" onclick="toggle('/measure','measureBtn')">Measure: OFF</button>
-  <button id="regulateBtn" onclick="toggle('/regulate','regulateBtn')">Regulate: OFF</button>
-  <button id="flushBtn" onclick="toggle('/flush','flushBtn')">Flush: OFF</button>
-  <button id="calibrateBtn" onclick="toggle('/calibrate','calibrateBtn')">Calibrate: OFF</button>
+  <h3>State Machine Control</h3>
+  <button onclick="setState('/idle')">IDLE</button>
+  <button id="waterBtn" onclick="setState('/water')">WATER</button>
+  <button id="measureBtn" onclick="setState('/measure')">MEASURE</button>
+  <button id="regulateBtn" onclick="setState('/regulate')">REGULATE</button>
+  <button id="flushBtn" onclick="setState('/flush')">FLUSH</button>
+  <button id="calibrateBtn" onclick="setState('/calibrate')">CALIBRATE</button>
 </div>
+
+</div>
+
+<!-- ================= GRAPH TAB ================= -->
+
+<div id="graph" class="tab">
+
+  EC: <span id="ec">0</span><br>
+  PH: <span id="ph">0</span><br>
+
+  <canvas id="chartEC"></canvas>
+  <canvas id="chartPH"></canvas>
 
 </div>
 
 <!-- ================= MONITOR TAB ================= -->
 <div id="monitor" class="tab">
 
-EC: <span id="ec">0</span><br>
-PH: <span id="ph">0</span><br>
-
-<canvas id="chart"></canvas>
-
-<pre id="log" style="text-align:left;height:200px;overflow:auto;background:#111;color:#0f0;"></pre>
+  <div style="display:flex; justify-content:center;">
+    <pre id="log" style="text-align:left;width:300px;height:600px;overflow:auto;background:transparent;color:black;"></pre>
+  </div>
 
 </div>
 
@@ -198,6 +265,11 @@ PH: <span id="ph">0</span><br>
 function showTab(id){
   document.querySelectorAll('.tab').forEach(e=>e.style.display='none');
   document.getElementById(id).style.display='block';
+}
+
+function setState(route)
+{
+  fetch(route.startsWith("/") ? route : "/" + route);
 }
 
 function toggle(url, btnId)
@@ -233,13 +305,46 @@ async function save(){
   await fetch(`/set?idle=${idle}&water=${water}&flush=${flush}`);
 }
 
-let chart = new Chart(document.getElementById('chart'), {
-  type:'line',
-  data:{labels:[],datasets:[
-    {label:'EC',data:[]},
-    {label:'PH',data:[]}
-  ]}
+let chartEC = new Chart(document.getElementById('chartEC'), {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      label: 'EC',
+      data: [],
+      borderColor: '#2196F3',
+      backgroundColor: 'rgba(0, 0, 255, 0.2)',
+      borderWidth: 2,
+      tension: 0.3
+    }]
+  },
+  options: {
+    responsive: false,
+    maintainAspectRatio: false
+  }
 });
+
+
+let chartPH = new Chart(document.getElementById('chartPH'), {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      label: 'PH',
+      data: [],
+      borderColor: '#4CAF50',
+      backgroundColor: 'rgba(0, 255, 0, 0.2)',
+      borderWidth: 2,
+      tension: 0.3
+    }]
+  },
+  options: {
+    responsive: false,
+    maintainAspectRatio: false
+  }
+});
+
+let initDone = false;
 
 async function update(){
   let d = await (await fetch('/data')).json();
@@ -247,11 +352,24 @@ async function update(){
   document.getElementById('state').innerText = d.state;
   document.getElementById('ec').innerText = d.ec;
   document.getElementById('ph').innerText = d.ph;
+  document.getElementById('timer').innerText = d.timer;
+  document.getElementById('time').innerText = d.time;
 
-  chart.data.labels = d.labels;
-  chart.data.datasets[0].data = d.ec_hist;
-  chart.data.datasets[1].data = d.ph_hist;
-  chart.update();
+  chartEC.data.labels = d.labels;
+  chartEC.data.datasets[0].data = d.ec_hist;
+  chartEC.update();
+
+  chartPH.data.labels = d.labels;
+  chartPH.data.datasets[0].data = d.ph_hist;
+  chartPH.update();
+
+  if (!initDone) {
+    document.getElementById('idle').value = d.idle;
+    document.getElementById('water').value = d.water;
+    document.getElementById('flush').value = d.flush;
+    initDone = true;
+  }
+
 }
 
 async function updateLog(){
@@ -259,8 +377,11 @@ async function updateLog(){
   document.getElementById('log').innerText = await r.text();
 }
 
-setInterval(update, 2000);
-setInterval(updateLog, 2000);
+setInterval(update, 500);
+setInterval(updateLog, 500);
+
+update();
+updateLog();
 
 showTab('main');
 
@@ -340,11 +461,29 @@ void connectWiFi()
     {
       MDNS.addService("http", "tcp", 80);
     }
+
+    configTime(3600, 3600, "pool.ntp.org", "time.nist.gov");
   }
   else
   {
     startAP();
   }
+}
+
+
+// ==================================================
+// DATE TIME
+// ==================================================
+String getTimeString()
+{
+  struct tm timeinfo;
+
+  if(!getLocalTime(&timeinfo))
+    return "--:--:--";
+
+  char buf[30];
+  strftime(buf, sizeof(buf), "%H:%M:%S", &timeinfo);
+  return String(buf);
 }
 
 // ==================================================
@@ -354,36 +493,66 @@ String buildJson()
 {
   String json = "{";
 
-  json += "\"state\":\"" + String(fsm.stateName()) + "\",";
-  json += "\"ec\":" + String(ec) + ",";
-  json += "\"ph\":" + String(ph) + ",";
+  // Basic values
+  const char* stateName = fsm.stateName();
+  json += "\"state\":\"" + String(stateName ? stateName : "UNKNOWN") + "\",";
+  json += "\"timer\":" + String(remaining_seconds) + ",";
+  json += "\"ec\":" + String(ec, 2) + ",";
+  json += "\"ph\":" + String(ph, 2) + ",";
+  json += "\"time\":\"" + getTimeString() + "\",";
+  json += "\"idle\":" + String(cylce_time_minutes) + ",";
+  json += "\"water\":" + String(watering_minutes) + ",";
+  json += "\"flush\":" + String(flush_minutes) + ",";
 
+  const char* img;
+
+  switch(system_cmd)
+  {
+    case CMD_IDLE:     img = img_idle; break;
+    case CMD_WATER:    img = img_idle; break; //img_water; break;
+    case CMD_MEASURE:  img = img_idle; break; //img_measure; break;
+    case CMD_REGULATE: img = img_idle; break; //img_regulate; break;
+    case CMD_FLUSH:    img = img_idle; break; //img_flush; break;
+    case CMD_CALIBRATE:img = img_idle; break; //img_calibrate; break;
+    default:           img = img_idle; break; //img_idle; break;
+  }
+
+  json += "\"img\":\"";
+  json += img;
+  json += "\",";
+
+  // History count
   int count = hist_full ? MAX_POINTS : hist_index;
 
+  // Labels (NO leading comma bug!)
   json += "\"labels\":[";
-  for(int i=0;i<count;i++){
+  for(int i = 0; i < count; i++){
     json += "\"" + String(i) + "\"";
-    if(i<count-1) json += ",";
+    if(i < count - 1) json += ",";
   }
   json += "],";
 
+  // EC history
   json += "\"ec_hist\":[";
-  for(int i=0;i<count;i++){
-    json += String(ec_hist[i]);
-    if(i<count-1) json += ",";
+  for(int i = 0; i < count; i++){
+    json += String(ec_hist[i], 2);
+    if(i < count - 1) json += ",";
   }
   json += "],";
 
+  // PH history
   json += "\"ph_hist\":[";
-  for(int i=0;i<count;i++){
-    json += String(ph_hist[i]);
-    if(i<count-1) json += ",";
+  for(int i = 0; i < count; i++){
+    json += String(ph_hist[i], 2);
+    if(i < count - 1) json += ",";
   }
   json += "]";
 
   json += "}";
+
   return json;
 }
+
 
 // ==================================================
 // ROUTES
@@ -417,7 +586,7 @@ void setupRoutes()
   server.on("/set", HTTP_GET, [](AsyncWebServerRequest *req)
   {
     if(req->hasParam("idle"))
-      idle_minutes = req->getParam("idle")->value().toInt();
+      cylce_time_minutes = req->getParam("idle")->value().toInt();
 
     if(req->hasParam("water"))
       watering_minutes = req->getParam("water")->value().toInt();
@@ -429,40 +598,40 @@ void setupRoutes()
     req->send(200, "text/plain", "OK");
   });
 
-  // ===== toggle endpoints =====
+  server.on("/idle", HTTP_GET, [](AsyncWebServerRequest *req)
+  {
+    setCommand(CMD_IDLE, "IDLE");
+    req->send(200, "text/plain", "OK");
+  });
+
   server.on("/water", HTTP_GET, [](AsyncWebServerRequest *req)
   {
-    watering_active = !watering_active;
-    setCommand(watering_active ? CMD_WATER_ON : CMD_WATER_OFF, "WATER");
-    req->send(200, "text/plain", watering_active ? "ON" : "OFF");
+    setCommand(CMD_WATER, "WATER");
+    req->send(200, "text/plain", "OK");
   });
 
   server.on("/measure", HTTP_GET, [](AsyncWebServerRequest *req)
   {
-    measure_active = !measure_active;
-    setCommand(measure_active ? CMD_MEASURE_ON : CMD_MEASURE_OFF, "MEASURE");
-    req->send(200, "text/plain", measure_active ? "ON" : "OFF");
+    setCommand(CMD_MEASURE, "MEASURE");
+    req->send(200, "text/plain", "OK");
   });
 
   server.on("/regulate", HTTP_GET, [](AsyncWebServerRequest *req)
   {
-    regulate_active = !regulate_active;
-    setCommand(regulate_active ? CMD_REGULATE_ON : CMD_REGULATE_OFF, "REGULATE");
-    req->send(200, "text/plain", regulate_active ? "ON" : "OFF");
+    setCommand(CMD_REGULATE, "REGULATE");
+    req->send(200, "text/plain", "OK");
   });
 
   server.on("/flush", HTTP_GET, [](AsyncWebServerRequest *req)
   {
-    flush_active = !flush_active;
-    setCommand(flush_active ? CMD_FLUSH_ON : CMD_FLUSH_OFF, "FLUSH");
-    req->send(200, "text/plain", flush_active ? "ON" : "OFF");
+    setCommand(CMD_FLUSH, "FLUSH");
+    req->send(200, "text/plain", "OK");
   });
 
   server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest *req)
   {
-    calibrate_active = !calibrate_active;
-    setCommand(calibrate_active ? CMD_CALIBRATE_ON : CMD_CALIBRATE_OFF, "CALIBRATE");
-    req->send(200, "text/plain", calibrate_active ? "ON" : "OFF");
+    setCommand(CMD_CALIBRATE, "CALIBRATE");
+    req->send(200, "text/plain", "OK");
   });
 }
 
@@ -476,34 +645,11 @@ void web_init()
 
 void web_loop() 
 {
-  State* s = fsm.current;
+  static String lastState = "";
+  String currentState = String(fsm.stateName());
 
-  if (s == &STATE_IDLE)
+  if(currentState != lastState)
   {
-    web_log("STATE: IDLE");
-  }
-  else if (s == &STATE_WATERING)
-  {
-    web_log("STATE: WATERING");
-  }
-  else if (s == &STATE_MEASURE)
-  {
-    web_log("STATE: MEASURE");
-  }
-  else if (s == &STATE_REGULATE)
-  {
-    web_log("STATE: REGULATE");
-  }
-  else if (s == &STATE_FLUSH)
-  {
-    web_log("STATE: FLUSH");
-  }
-  else if (s == &STATE_CALIBRATE)
-  {
-    web_log("STATE: CALIBRATE");
-  }
-  else
-  {
-    web_log("STATE: UNKNOWN");
+    lastState = currentState;
   }
 }

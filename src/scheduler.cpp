@@ -21,6 +21,35 @@ static String formatTime(uint64_t us)
   return String(us) + "us";
 }
 
+uint32_t scheduler_t::getRemainingTime(task_t &task)
+{
+  if (task.index < 0 || task.index >= taskCount) return 0;
+
+  auto &t = tasks[task.index];
+
+  if (!t.active) return 0;
+
+  uint64_t now = micros();
+  uint64_t elapsed = now - t.lastRun;
+
+  if (elapsed >= t.interval) return 0;
+
+  return (t.interval - elapsed) / 1000000ULL; // seconds
+}
+
+bool scheduler_t::nextSecond()
+{
+  uint64_t now = micros();
+
+  if (now - lastSecondTick >= 1000000ULL)
+  {
+    lastSecondTick += 1000000ULL;
+    return true;
+  }
+
+  return false;
+}
+
 // ---------------- Scheduler ----------------
 
 bool scheduler_t::addTask(task_t &task, TaskCallback cb, Time t, TaskCallback stopCb)
@@ -29,6 +58,7 @@ bool scheduler_t::addTask(task_t &task, TaskCallback cb, Time t, TaskCallback st
 
   // assign ID early
   task.id = nextId++;
+  task.index = taskCount;
 
   // store task safely
   tasks[taskCount] = {
@@ -59,7 +89,7 @@ bool scheduler_t::removeTask(task_t &task)
   for (int i = 0; i < taskCount; i++) {
     if (tasks[i].id == task.id) {
 
-      web_log(String("SCHED - ") + task.name + " id:" + task.id);
+      // web_log(String("SCHED - ") + task.name + " id:" + task.id);
 
       for (int j = i; j < taskCount - 1; j++) {
         tasks[j] = tasks[j + 1];
@@ -87,7 +117,7 @@ bool scheduler_t::startTask(task_t &task)
         if (tasks[i].interval >= 1000000ULL) {
           web_log(String("SCHED ▶ ") + task.name + " " + formatTime(tasks[i].interval));
         } else {
-          web_log(String("SCHED ▶ ") + task.name);
+          // web_log(String("SCHED ▶ ") + task.name);
         }
       }
 
@@ -109,7 +139,7 @@ bool scheduler_t::stopTask(task_t &task)
           tasks[i].stopCallback();
         }
 
-        web_log(String("SCHED ⏸ ") + task.name);
+        // web_log(String("SCHED ⏸ ") + task.name);
       }
 
       return true;

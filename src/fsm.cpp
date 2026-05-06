@@ -11,10 +11,21 @@ extern void disableLed2();
 extern void sensorProcess();
 extern void sensorRead();
 
+inline Time minToTime(int minutes)
+{
+  return Time::sec(minutes * 60);
+}
+
+extern int cylce_time_minutes;
+extern int watering_minutes;
+extern int flush_minutes;
+
+uint32_t remaining_seconds = 6;
+
 // ---- tasks ----
 task_t led1_task            { "LED1" };
 task_t led2_task            { "LED2" };
-task_t t1_idle_task   { "WAIT" };
+task_t t1_idle_task         { "WAIT" };
 task_t t2_watering_task     { "WATERING" };
 task_t t9_flush_task        { "FLUSH" };
 task_t t3_measure_task      { "MEASURE" };
@@ -24,9 +35,17 @@ task_t measure_read_task    { "MEAS_READ" };
 
 Time led1_timeout{Time::ms(500)};
 Time led2_timeout{ Time::ms(100)};
-Time t1_idle_timeout{Time::sec(10)};
-Time t2_watering_timeout{Time::sec(10)};
-Time t9_flush_timeout{Time::sec(5)};
+inline Time getCycleTime() {
+  return minToTime(cylce_time_minutes);
+}
+inline Time getWateringTimeout() {
+  return minToTime(watering_minutes);
+}
+inline Time getFlushTimeout() {
+  return minToTime(flush_minutes);
+}
+Time t2_watering_timeout{getWateringTimeout()};
+Time t9_flush_timeout{getFlushTimeout()};
 Time t3_measure_timeout{Time::sec(3)};
 Time t48_dose_timeout{Time::sec(3)};
 Time measure_process_timeout{Time::us_(5000)};
@@ -40,7 +59,7 @@ WateringState STATE_WATERING;
 MeasureState STATE_MEASURE;
 RegulateState STATE_REGULATE;
 FlushState STATE_FLUSH;
-ErrorState STATE_ERROR;
+StopState STATE_STOP;
 IdleState STATE_IDLE;
 
 // ==================================================
@@ -54,7 +73,7 @@ const char* fsm_t::stateName() const {
   if (current == &STATE_MEASURE) return "MEASURE";
   if (current == &STATE_REGULATE) return "REGULATE";
   if (current == &STATE_FLUSH) return "FLUSH";
-  if (current == &STATE_ERROR) return "ERROR";
+  if (current == &STATE_STOP) return "ERROR";
   if (current == &STATE_IDLE) return "IDLE";
   return "UNKNOWN";
 }
@@ -101,11 +120,11 @@ void InitState::enter(fsm_t &fsm) {
     s.addTask(led2_task, toggleLed2, led2_timeout, disableLed2);
     s.addTask(measure_process_task, sensorProcess,measure_process_timeout );
     s.addTask(measure_read_task, sensorRead, measure_read_timeout );
-    s.addTask(t1_idle_task,     [&fsm]() {fsm.setDone();  }, t1_idle_timeout     );
-    s.addTask(t2_watering_task, [&fsm]() {fsm.setDone();  }, t2_watering_timeout );
-    s.addTask(t3_measure_task,  [&fsm]() {fsm.setDone();  }, t3_measure_timeout  );
-    s.addTask(t48_dose_task,    [&fsm]() {fsm.setDone();  }, t48_dose_timeout    );
-    s.addTask(t9_flush_task,    [&fsm]() {fsm.setDone();  }, t9_flush_timeout    );
+    s.addTask(t1_idle_task,     [&fsm]() {fsm.setDone();  }, getCycleTime()     );
+    s.addTask(t2_watering_task, [&fsm]() {fsm.setDone();  }, getWateringTimeout() );
+    s.addTask(t3_measure_task,  [&fsm]() {fsm.setDone();  }, t3_measure_timeout   );
+    s.addTask(t48_dose_task,    [&fsm]() {fsm.setDone();  }, t48_dose_timeout     );
+    s.addTask(t9_flush_task,    [&fsm]() {fsm.setDone();  }, getFlushTimeout()    );
 }
 
 void InitState::update(fsm_t &fsm) {
@@ -117,6 +136,7 @@ void InitState::update(fsm_t &fsm) {
 
 void IdleState::enter(fsm_t &fsm) {
   auto &s = fsm.scheduler();
+  s.setInterval(t1_idle_task, getCycleTime());
   s.startTask(t1_idle_task);
 }
 
@@ -126,14 +146,16 @@ void IdleState::exit(fsm_t &fsm) {
 }
 
 void IdleState::update(fsm_t &fsm) {
+  auto &s = fsm.scheduler();
   if (fsm.error) {
-    fsm.transitionTo(&STATE_ERROR);
+    fsm.transitionTo(&STATE_STOP);
   }
   if(done) {
     fsm.transitionTo(&STATE_WATERING);
   }
+  if (fsm.scheduler().nextSecond())
   {
-
+    remaining_seconds = s.getRemainingTime(t1_idle_task);
   }
 }
 
@@ -142,6 +164,7 @@ void IdleState::update(fsm_t &fsm) {
 
 void WateringState::enter(fsm_t &fsm) {
   auto &s = fsm.scheduler();
+  s.setInterval(t2_watering_task, getWateringTimeout());
   s.startTask(t2_watering_task);
   s.startTask(led1_task);
 }
@@ -153,14 +176,18 @@ void WateringState::exit(fsm_t &fsm) {
 }
 
 void WateringState::update(fsm_t &fsm) {
+  auto &s = fsm.scheduler();
   if (fsm.error) {
-    fsm.transitionTo(&STATE_ERROR);
+    fsm.transitionTo(&STATE_STOP);
   }
   if (done)
   {
     fsm.transitionTo(&STATE_MEASURE);
   }
-  
+  if (fsm.scheduler().nextSecond())
+  {
+    remaining_seconds = s.getRemainingTime(t2_watering_task);
+  }
 }
 
 
@@ -184,8 +211,9 @@ void MeasureState::exit(fsm_t &fsm) {
 }
 
 void MeasureState::update(fsm_t &fsm) {
+  auto &s = fsm.scheduler();
   if (fsm.error) {
-    fsm.transitionTo(&STATE_ERROR);
+    fsm.transitionTo(&STATE_STOP);
   }
   if (done)
   {
@@ -194,6 +222,10 @@ void MeasureState::update(fsm_t &fsm) {
     } else {
       fsm.transitionTo(&STATE_IDLE);
     }
+  }
+  if (fsm.scheduler().nextSecond())
+  {
+    remaining_seconds = s.getRemainingTime(t3_measure_task);
   }
 }
 
@@ -210,12 +242,17 @@ void RegulateState::exit(fsm_t &fsm) {
 }
 
 void RegulateState::update(fsm_t &fsm) {
+  auto &s = fsm.scheduler();
   if (fsm.error) {
-    fsm.transitionTo(&STATE_ERROR);
+    fsm.transitionTo(&STATE_STOP);
   }
   if (done)
   {
     fsm.transitionTo(&STATE_FLUSH);
+  }
+  if (fsm.scheduler().nextSecond())
+  {
+    remaining_seconds = s.getRemainingTime(t48_dose_task);
   }
 }
 
@@ -225,6 +262,7 @@ void RegulateState::update(fsm_t &fsm) {
 void FlushState::enter(fsm_t &fsm) 
 {
   auto &s = fsm.scheduler();
+  s.setInterval(t9_flush_task, getFlushTimeout());
   s.startTask(t9_flush_task);
   s.startTask(led1_task);
 }
@@ -236,12 +274,17 @@ void FlushState::exit(fsm_t &fsm) {
 }
 
 void FlushState::update(fsm_t &fsm) {
+  auto &s = fsm.scheduler();
   if (fsm.error) {
-    fsm.transitionTo(&STATE_ERROR);
+    fsm.transitionTo(&STATE_STOP);
   }
   if (done)
   {
     fsm.transitionTo(&STATE_IDLE);
+  }
+  if (fsm.scheduler().nextSecond())
+  {
+    remaining_seconds = s.getRemainingTime(t9_flush_task);
   }
 }
 
@@ -258,7 +301,7 @@ void CalibrateState::exit(fsm_t &fsm) {
 
 void CalibrateState::update(fsm_t &fsm) {
   if (fsm.error) {
-    fsm.transitionTo(&STATE_ERROR);
+    fsm.transitionTo(&STATE_STOP);
   }
   if (done)
   {
@@ -269,13 +312,13 @@ void CalibrateState::update(fsm_t &fsm) {
 
 // ---------- ERROR ----------
 
-void ErrorState::enter(fsm_t &fsm) {
+void StopState::enter(fsm_t &fsm) {
 }
 
-void ErrorState::exit(fsm_t &fsm) {
+void StopState::exit(fsm_t &fsm) {
 }
 
-void ErrorState::update(fsm_t &fsm) {
+void StopState::update(fsm_t &fsm) {
   if (fsm.error_ack) {
     fsm.transitionTo(&STATE_IDLE);
   }

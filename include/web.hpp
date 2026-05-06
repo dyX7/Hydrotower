@@ -16,20 +16,20 @@ extern int pump_cycle_minutes;
 enum system_cmd_t {
   CMD_NONE,
 
-  CMD_WATER_ON,
-  CMD_WATER_OFF,
-
-  CMD_MEASURE_ON,
-  CMD_MEASURE_OFF,
-
-  CMD_REGULATE_ON,
-  CMD_REGULATE_OFF,
-
-  CMD_FLUSH_ON,
-  CMD_FLUSH_OFF,
-
-  CMD_CALIBRATE_ON,
-  CMD_CALIBRATE_OFF
+  CMD_IDLE,
+  CMD_WATER,
+  CMD_MEASURE,
+  CMD_REGULATE,
+  CMD_FLUSH,
+  CMD_CALIBRATE,
 };
 
 extern volatile system_cmd_t system_cmd;
+
+extern uint8_t img_test[];
+extern const char img_idle[];
+extern const char img_water[];
+extern const char img_measure[];
+extern const char img_regulate[];
+extern const char img_flush[];
+extern const char img_calibrate[];

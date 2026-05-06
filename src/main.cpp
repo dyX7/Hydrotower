@@ -123,6 +123,10 @@ void sensorProcess()
 
         _read_sensors = false;
 
+        // remove later
+        ec = random(0, 100);
+        ph = random(0, 14);
+
         web_add_data(ec, ph);
 
         // Serial.print("EC: "); Serial.print(ec);
@@ -160,81 +164,48 @@ void loop()
 {
   fsm.poll();
   scheduler.poll();
+  web_loop();
 
   // handle web commands
   switch(system_cmd)
   {
-    case CMD_WATER_ON:
+    case CMD_IDLE:
     {
-      system_cmd = CMD_NONE;
+      web_log("Manual IDLE");
+      fsm.transitionTo(&STATE_IDLE);
+      break;
+    }
+    case CMD_WATER:
+    {
       web_log("Watering ENABLED");
       fsm.transitionTo(&STATE_WATERING);
       break;
     }
-    case CMD_WATER_OFF:
+    case CMD_MEASURE:
     {
-      system_cmd = CMD_NONE;
-      web_log("Watering DISABLED");
-      fsm.transitionTo(&STATE_IDLE);
-      break;
-    }
-    case CMD_MEASURE_ON:
-    {
-      system_cmd = CMD_NONE;
       web_log("Manual MEASURE");
       fsm.transitionTo(&STATE_MEASURE);
       break;
     }
-    case CMD_MEASURE_OFF:
+    case CMD_REGULATE:
     {
-      system_cmd = CMD_NONE;
-      web_log("Manual MEASURE");
-      fsm.transitionTo(&STATE_IDLE);
-      break;
-    }
-    case CMD_REGULATE_ON:
-    {
-      system_cmd = CMD_NONE;
       web_log("Manual REGULATE");
       fsm.transitionTo(&STATE_REGULATE);
       break;
     }
-    case CMD_REGULATE_OFF:
+    case CMD_FLUSH:
     {
-      system_cmd = CMD_NONE;
-      web_log("Manual REGULATE");
-      fsm.transitionTo(&STATE_IDLE);
-      break;
-    }
-    case CMD_FLUSH_ON:
-    {
-      system_cmd = CMD_NONE;
       web_log("Manual FLUSH");
       fsm.transitionTo(&STATE_FLUSH);
       break;
     }
-    case CMD_FLUSH_OFF:
+    case CMD_CALIBRATE:
     {
-      system_cmd = CMD_NONE;
-      web_log("Manual FLUSH");
-      fsm.transitionTo(&STATE_IDLE);
-      break;
-    }
-    case CMD_CALIBRATE_ON:
-    {
-      system_cmd = CMD_NONE;
       web_log("Manual CALIBRATE");
       fsm.transitionTo(&STATE_CALIBRATE);
       break;
     }
-    case CMD_CALIBRATE_OFF:
-    {
-      system_cmd = CMD_NONE;
-      web_log("Manual CALIBRATE");
-      fsm.transitionTo(&STATE_IDLE);
-      break;
-    }
-
 }
+system_cmd = CMD_NONE;
 
 }
