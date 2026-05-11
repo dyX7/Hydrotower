@@ -131,8 +131,7 @@ button { padding:10px; margin:5px; }
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 50%;
-  margin: 8px auto;
+  margin: 10px auto;
   gap: 10px;
 }
 
@@ -144,10 +143,10 @@ button { padding:10px; margin:5px; }
 
 .section {
   margin-top: 20px;
-  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
 }
 
 #chart {
@@ -158,8 +157,7 @@ button { padding:10px; margin:5px; }
 
 .timerLabel {
   width: 120px;
-  text-align: right;
-  margin-right: 10px;
+  text-align: center;
 }
 
 #chartEC, #chartPH {
@@ -265,8 +263,8 @@ button { padding:10px; margin:5px; }
 
 <div class="tabBar">
   <button class="tabBtn" onclick="showTab('main')">Control</button>
-  <button class="tabBtn" onclick="showTab('param')">Param</button>
   <button class="tabBtn" onclick="showTab('graph')">Graph</button>
+  <button class="tabBtn" onclick="showTab('param')">Param</button>
   <button class="tabBtn" onclick="showTab('monitor')">Log</button>
 </div>
 
@@ -276,31 +274,65 @@ button { padding:10px; margin:5px; }
 
   <div class="dashboard">
 
-    <div class="stateBox">
-      <div id="state">---</div>
-      <div><span id="timer">0</span> s</div>
+    <div id="stateControl">---</div>
+      <div><span id="timerControl">0</span> s</div>
+
+      <div class="dataBlock">
+        <div>
+          EC: <span id="ecControlValue">0</span>
+          [<span id="ecTargetControl">0</span>]
+        </div>
+
+        <div>
+          PH: <span id="phControlValue">0</span>
+          [<span id="phTargetControl">0</span>]
+        </div>
     </div>
 
-    <div class="dataBlock">
-      <div>EC: <span id="ec">0</span> Target: <span id="ecTarget">0</span> </div>
-      <div>PH: <span id="ph">0</span> Target: <span id="phTarget">0</span> </div>
-    </div>
+    <div class="buttonGrid">
 
-  <div class="buttonGrid">
+      <button class="stateBtn" onclick="setState('/idle')">IDLE</button>
+      <button class="stateBtn" id="waterBtn" onclick="setState('/water')">WATER</button>
 
-    <button class="stateBtn" onclick="setState('/idle')">IDLE</button>
-    <button class="stateBtn" id="waterBtn" onclick="setState('/water')">WATER</button>
+      <button class="stateBtn" id="measureBtn" onclick="setState('/measure')">MEASURE</button>
+      <button class="stateBtn" id="regulateBtn" onclick="setState('/regulate')">REGULATE</button>
 
-    <button class="stateBtn" id="measureBtn" onclick="setState('/measure')">MEASURE</button>
-    <button class="stateBtn" id="regulateBtn" onclick="setState('/regulate')">REGULATE</button>
-
-    <button class="stateBtn" id="flushBtn" onclick="setState('/flush')">FLUSH</button>
-    <button class="stateBtn" id="calibrateBtn" onclick="setState('/calibrate')">CALIBRATE</button>
+      <button class="stateBtn" id="flushBtn" onclick="setState('/flush')">FLUSH</button>
+      <button class="stateBtn" id="calibrateBtn" onclick="setState('/calibrate')">CALIBRATE</button>
     </div>
 
   </div>
 
 </div>
+
+
+<!-- ================= GRAPH TAB ================= -->
+
+<div id="graph" class="tab">
+
+  <div class="dashboard">
+
+    <div id="stateGraph">---</div>
+    <div><span id="timerGraph">0</span> s</div>
+
+    <div class="dataBlock">
+      <div>
+        EC: <span id="ecGraphValue">0</span>
+        [<span id="ecTargetGraph">0</span>]
+      </div>
+
+      <div>
+        PH: <span id="phGraphValue">0</span>
+        [<span id="phTargetGraph">0</span>]
+      </div>
+    </div>
+
+    <canvas id="chartEC"></canvas>
+    <canvas id="chartPH"></canvas>
+
+  </div>
+</div>
+
 
 <!-- ================= PARAM TAB ================= -->
 
@@ -311,11 +343,13 @@ button { padding:10px; margin:5px; }
     <div class="timerRow">
       <div class="timerLabel">EC Target</div>
       <input id="ecReg" class="timerValue" type="number" step="0.01">
+      <span>mS/cm</span>
     </div>
 
     <div class="timerRow">
       <div class="timerLabel">PH Target</div>
       <input id="phReg" class="timerValue" type="number" step="0.01">
+      <span>pH</span>
     </div>
 
     <div class="timerRow">
@@ -379,20 +413,6 @@ button { padding:10px; margin:5px; }
     <button class="stateBtn" onclick="save()">Save</button>
 
   </div>
-
-</div>
-
-<!-- ================= GRAPH TAB ================= -->
-
-<div id="graph" class="tab">
-
-  <div class="dataBlock">
-    <div>EC: <span id="ecGraph">0</span></div>
-    <div>PH: <span id="phGraph">0</span></div>
-  </div>
-
-  <canvas id="chartEC"></canvas>
-  <canvas id="chartPH"></canvas>
 
 </div>
 
@@ -473,38 +493,123 @@ let chartEC = new Chart(document.getElementById('chartEC'), {
   type: 'line',
   data: {
     labels: [],
-    datasets: [{
-      label: 'EC',
-      data: [],
-      borderColor: '#2196F3',
-      backgroundColor: 'rgba(0, 0, 255, 0.2)',
-      borderWidth: 2,
-      tension: 0.3
-    }]
+    datasets: [
+
+      {
+        label: 'EC (mS/cm)',
+        data: [],
+        borderColor: '#2196F3',
+        backgroundColor: 'rgba(0, 0, 255, 0.2)',
+        borderWidth: 2,
+        tension: 0.3,
+
+        pointRadius: 1,
+        pointHoverRadius: 3
+      },
+
+      {
+        label: 'EC Target',
+        data: [],
+        borderColor: '#FF0000',
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0,
+        borderDash: [8, 4]
+      }
+
+    ]
   },
+
   options: {
     responsive: false,
-    maintainAspectRatio: false
+    maintainAspectRatio: false,
+
+    plugins: {
+      legend: {
+        display: true
+      }
+    },
+
+    scales: {
+      y: {
+        min: 0,
+        max: 3.0,
+
+        title: {
+          display: true,
+          text: 'EC (mS/cm)'
+        }
+      },
+
+      x: {
+        title: {
+          display: true,
+          text: 'Samples'
+        }
+      }
+    }
   }
 });
-
 
 let chartPH = new Chart(document.getElementById('chartPH'), {
   type: 'line',
   data: {
     labels: [],
-    datasets: [{
-      label: 'PH',
-      data: [],
-      borderColor: '#4CAF50',
-      backgroundColor: 'rgba(0, 255, 0, 0.2)',
-      borderWidth: 2,
-      tension: 0.3
-    }]
+    datasets: [
+
+      {
+        label: 'PH',
+        data: [],
+        borderColor: '#4CAF50',
+        backgroundColor: 'rgba(0, 255, 0, 0.2)',
+        borderWidth: 2,
+        tension: 0.3,
+
+        pointRadius: 1,
+        pointHoverRadius: 3
+      },
+
+      {
+        label: 'PH Target',
+        data: [],
+        borderColor: '#FF0000',
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0,
+        borderDash: [8, 4]
+      }
+
+    ]
   },
+
   options: {
     responsive: false,
-    maintainAspectRatio: false
+    maintainAspectRatio: false,
+
+    plugins: {
+      legend: {
+        display: true
+      }
+    },
+
+    scales: {
+      y: {
+        min: 4,
+        max: 9,
+
+        title: {
+          display: true,
+          text: 'pH'
+        }
+      },
+
+      x: {
+        title: {
+          display: true,
+          text: 'Samples'
+        }
+      }
+    }
   }
 });
 
@@ -513,21 +618,43 @@ let initDone = false;
 async function update(){
   let d = await (await fetch('/data')).json();
 
-  document.getElementById('state').innerText = d.state;
-  document.getElementById('ec').innerText = d.ec;
-  document.getElementById('ph').innerText = d.ph;
-  document.getElementById('timer').innerText = d.timer;
   document.getElementById('time').innerText = d.time;
 
-  document.getElementById('ecTarget').innerText = d.ecReg;
-  document.getElementById('phTarget').innerText = d.phReg;
+  // CONTROL TAB
+  document.getElementById('stateControl').innerText = d.state;
+  document.getElementById('ecControlValue').innerText = d.ec;
+  document.getElementById('phControlValue').innerText = d.ph;
+  document.getElementById('timerControl').innerText = d.timer;
 
+  document.getElementById('ecTargetControl').innerText = d.ecReg;
+  document.getElementById('phTargetControl').innerText = d.phReg;
+
+  // GRAPH TAB
+  document.getElementById('stateGraph').innerText = d.state;
+  document.getElementById('ecGraphValue').innerText = d.ec;
+  document.getElementById('phGraphValue').innerText = d.ph;
+  document.getElementById('timerGraph').innerText = d.timer;
+
+  document.getElementById('ecTargetGraph').innerText = d.ecReg;
+  document.getElementById('phTargetGraph').innerText = d.phReg;
+
+
+  // EC GRAPH
   chartEC.data.labels = d.labels;
   chartEC.data.datasets[0].data = d.ec_hist;
+
+  // horizontal target line
+  chartEC.data.datasets[1].data =
+      d.labels.map(() => d.ecReg);
   chartEC.update();
 
+  // PH GRAPH
   chartPH.data.labels = d.labels;
   chartPH.data.datasets[0].data = d.ph_hist;
+
+  // horizontal target line
+  chartPH.data.datasets[1].data =
+      d.labels.map(() => d.phReg);
   chartPH.update();
 
   if (!initDone) {

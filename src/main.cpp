@@ -124,8 +124,18 @@ void sensorProcess()
         _read_sensors = false;
 
         // remove later
-        ec = random(0, 100);
-        ph = random(0, 14);
+        static float ecSim = 1.8;
+        static float phSim = 6.0;
+        ecSim += random(-5, 6) / 100.0;
+        phSim += random(-3, 4) / 100.0;
+        // clamp values
+        if(ecSim < 0.8) ecSim = 0.8;
+        if(ecSim > 2.4) ecSim = 2.4;
+        if(phSim < 5.5) phSim = 5.5;
+        if(phSim > 7.0) phSim = 7.0;
+
+        ec = ecSim;
+        ph = phSim;
 
         web_add_data(ec, ph);
 
