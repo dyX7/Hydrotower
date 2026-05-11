@@ -2,6 +2,7 @@
 #include "scheduler.hpp"
 #include <settings.hpp>
 #include "web.hpp"
+#include <time.h>
 
 // ---- external functions ----
 extern void toggleLed1();
@@ -19,6 +20,10 @@ inline Time minToTime(int minutes)
 extern int cylce_time_minutes;
 extern int watering_minutes;
 extern int flush_minutes;
+extern int sleep_start_hour;
+extern int sleep_start_minute;
+extern int sleep_end_hour;
+extern int sleep_end_minute;
 
 uint32_t remaining_seconds = 6;
 
@@ -32,6 +37,7 @@ task_t t3_measure_task      { "MEASURE" };
 task_t t48_dose_task        { "DOSE" };
 task_t measure_process_task { "MEAS_PROC" };
 task_t measure_read_task    { "MEAS_READ" };
+task_t second_task          { "SECOND" };
 
 Time led1_timeout{Time::ms(500)};
 Time led2_timeout{ Time::ms(100)};
@@ -73,9 +79,96 @@ const char* fsm_t::stateName() const {
   if (current == &STATE_MEASURE) return "MEASURE";
   if (current == &STATE_REGULATE) return "REGULATE";
   if (current == &STATE_FLUSH) return "FLUSH";
-  if (current == &STATE_STOP) return "ERROR";
+  if (current == &STATE_STOP) return "STOP";
   if (current == &STATE_IDLE) return "IDLE";
   return "UNKNOWN";
+}
+
+bool fsm_t::isSleepTime()
+{
+  struct tm timeinfo;
+
+  if(!getLocalTime(&timeinfo))
+  {
+    return false;
+  }
+
+  int nowMinutes =
+      timeinfo.tm_hour * 60 +
+      timeinfo.tm_min;
+
+  int startMinutes =
+      sleep_start_hour * 60 +
+      sleep_start_minute;
+
+  int endMinutes =
+      sleep_end_hour * 60 +
+      sleep_end_minute;
+
+  bool result;
+
+  if(startMinutes > endMinutes)
+  {
+    result = (nowMinutes >= startMinutes ||
+              nowMinutes < endMinutes);
+  }
+  else
+  {
+    result = (nowMinutes >= startMinutes &&
+              nowMinutes < endMinutes);
+  }
+
+  return result;
+}
+
+void fsm_t::event1sec()
+{
+  struct tm timeinfo;
+
+  if(!getLocalTime(&timeinfo))
+  {
+    return;
+  }
+
+  int nowMinutes =
+      timeinfo.tm_hour * 60 +
+      timeinfo.tm_min;
+
+  int startMinutes =
+      sleep_start_hour * 60 +
+      sleep_start_minute;
+
+  int endMinutes =
+      sleep_end_hour * 60 +
+      sleep_end_minute;
+
+  bool sleep = isSleepTime();
+
+  // ---------------- STATE CHANGE TRACKING ----------------
+  static bool lastSleep = false;
+
+  if(sleep != lastSleep)
+  {
+    lastSleep = sleep;
+  }
+
+  // ---------------- FSM TRANSITION ----------------
+  if(sleep)
+  {
+    if(current != &STATE_STOP)
+    {
+      web_log("FSM -> STOP (sleep active)");
+      transitionTo(&STATE_STOP);
+    }
+  }
+  else
+  {
+    if(current == &STATE_STOP && !error)
+    {
+      web_log("FSM -> IDLE (sleep ended)");
+      transitionTo(&STATE_IDLE);
+    }
+  }
 }
 
 // ==================================================
@@ -120,11 +213,12 @@ void InitState::enter(fsm_t &fsm) {
     s.addTask(led2_task, toggleLed2, led2_timeout, disableLed2);
     s.addTask(measure_process_task, sensorProcess,measure_process_timeout );
     s.addTask(measure_read_task, sensorRead, measure_read_timeout );
-    s.addTask(t1_idle_task,     [&fsm]() {fsm.setDone();  }, getCycleTime()     );
+    s.addTask(t1_idle_task,     [&fsm]() {fsm.setDone();  }, getCycleTime()       );
     s.addTask(t2_watering_task, [&fsm]() {fsm.setDone();  }, getWateringTimeout() );
     s.addTask(t3_measure_task,  [&fsm]() {fsm.setDone();  }, t3_measure_timeout   );
     s.addTask(t48_dose_task,    [&fsm]() {fsm.setDone();  }, t48_dose_timeout     );
     s.addTask(t9_flush_task,    [&fsm]() {fsm.setDone();  }, getFlushTimeout()    );
+    s.addTask(second_task,      [&fsm]() {fsm.event1sec();  }, Time::sec(1)       );
 }
 
 void InitState::update(fsm_t &fsm) {
@@ -136,6 +230,7 @@ void InitState::update(fsm_t &fsm) {
 
 void IdleState::enter(fsm_t &fsm) {
   auto &s = fsm.scheduler();
+  s.startTask(second_task);
   s.setInterval(t1_idle_task, getCycleTime());
   s.startTask(t1_idle_task);
 }
@@ -143,11 +238,12 @@ void IdleState::enter(fsm_t &fsm) {
 void IdleState::exit(fsm_t &fsm) {
   auto &s = fsm.scheduler();
   s.stopTask(t1_idle_task);
+  s.startTask(second_task);
 }
 
 void IdleState::update(fsm_t &fsm) {
   auto &s = fsm.scheduler();
-  if (fsm.error) {
+  if (fsm.stop) {
     fsm.transitionTo(&STATE_STOP);
   }
   if(done) {
@@ -177,7 +273,7 @@ void WateringState::exit(fsm_t &fsm) {
 
 void WateringState::update(fsm_t &fsm) {
   auto &s = fsm.scheduler();
-  if (fsm.error) {
+  if (fsm.stop) {
     fsm.transitionTo(&STATE_STOP);
   }
   if (done)
@@ -212,7 +308,7 @@ void MeasureState::exit(fsm_t &fsm) {
 
 void MeasureState::update(fsm_t &fsm) {
   auto &s = fsm.scheduler();
-  if (fsm.error) {
+  if (fsm.stop) {
     fsm.transitionTo(&STATE_STOP);
   }
   if (done)
@@ -243,7 +339,7 @@ void RegulateState::exit(fsm_t &fsm) {
 
 void RegulateState::update(fsm_t &fsm) {
   auto &s = fsm.scheduler();
-  if (fsm.error) {
+  if (fsm.stop) {
     fsm.transitionTo(&STATE_STOP);
   }
   if (done)
@@ -275,7 +371,7 @@ void FlushState::exit(fsm_t &fsm) {
 
 void FlushState::update(fsm_t &fsm) {
   auto &s = fsm.scheduler();
-  if (fsm.error) {
+  if (fsm.stop) {
     fsm.transitionTo(&STATE_STOP);
   }
   if (done)
@@ -300,7 +396,7 @@ void CalibrateState::exit(fsm_t &fsm) {
 }
 
 void CalibrateState::update(fsm_t &fsm) {
-  if (fsm.error) {
+  if (fsm.stop) {
     fsm.transitionTo(&STATE_STOP);
   }
   if (done)
@@ -319,7 +415,7 @@ void StopState::exit(fsm_t &fsm) {
 }
 
 void StopState::update(fsm_t &fsm) {
-  if (fsm.error_ack) {
-    fsm.transitionTo(&STATE_IDLE);
-  }
+  // if (fsm.run) {
+  //   fsm.transitionTo(&STATE_IDLE);
+  // }
 }

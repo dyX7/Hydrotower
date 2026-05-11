@@ -15,14 +15,18 @@ String ssid;
 String password;
 bool apMode = false;
 
-// ---------------- Pump settings ----------------
-int pump_on_minutes = 1;
-int pump_cycle_minutes = 10;
 
-// NEW timers
 int cylce_time_minutes = 10;
 int watering_minutes = 5;
 int flush_minutes = 3;
+
+float ec_regulator = 1.80;
+float ph_regulator = 6.00;
+
+int sleep_start_hour = 22;
+int sleep_start_minute = 0;
+int sleep_end_hour = 6;
+int sleep_end_minute = 0;
 
 // ---------------- COMMAND BRIDGE ----------------
 volatile system_cmd_t system_cmd = CMD_NONE;
@@ -47,12 +51,28 @@ int hist_index = 0;
 bool hist_full = false;
 
 // ==================================================
+// DATE TIME
+// ==================================================
+String getTimeString()
+{
+  struct tm timeinfo;
+
+  if(!getLocalTime(&timeinfo))
+    return "--:--:--";
+
+  char buf[30];
+  strftime(buf, sizeof(buf), "%H:%M:%S", &timeinfo);
+  return String(buf);
+}
+
+// ==================================================
 // LOGGING
 // ==================================================
 void web_log(const String &msg)
 {
-  Serial.println(msg);
-  logBuffer[logIndex] = msg;
+  String line = "[" + getTimeString() + "] " + msg;
+  Serial.println(line);
+  logBuffer[logIndex] = line;
   logIndex = (logIndex + 1) % LOG_SIZE;
 }
 
@@ -174,6 +194,63 @@ button { padding:10px; margin:5px; }
   background-color: #e9fbea;
 }
 
+.tabBar {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: nowrap;
+}
+
+.tabBtn {
+  width: 80px;
+  height: 40px;
+  margin: 5px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  text-align: center;
+
+  font-size: 16px;
+  font-weight: bold;
+  border-radius: 2px;
+}
+
+.stateBtn {
+  width: 120px;
+  height: 40px;
+  margin: 5px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  text-align: center;
+
+  font-size: 16px;
+  font-weight: bold;
+  border-radius: 8px;
+}
+
+.buttonGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  justify-items: center;
+  width: 320px;
+}
+
+.timerValue {
+  width: 55px;
+  height: 30px;
+  text-align: center;
+  font-size: 18px;
+}
+
 </style>
 </head>
 
@@ -184,13 +261,19 @@ button { padding:10px; margin:5px; }
   <div id="time">--</div>
 </div>
 
-<button onclick="showTab('main')">Control</button>
-<button onclick="showTab('graph')">Graph</button>
-<button onclick="showTab('monitor')">Log</button>
+<!-- ================= TAB BUTTONS ================= -->
+
+<div class="tabBar">
+  <button class="tabBtn" onclick="showTab('main')">Control</button>
+  <button class="tabBtn" onclick="showTab('param')">Param</button>
+  <button class="tabBtn" onclick="showTab('graph')">Graph</button>
+  <button class="tabBtn" onclick="showTab('monitor')">Log</button>
+</div>
 
 <!-- ================= CONTROL TAB ================= -->
 
 <div id="main" class="tab">
+
   <div class="dashboard">
 
     <div class="stateBox">
@@ -199,43 +282,103 @@ button { padding:10px; margin:5px; }
     </div>
 
     <div class="dataBlock">
-      <div>EC: <span id="ec">0</span></div>
-      <div>PH: <span id="ph">0</span></div>
+      <div>EC: <span id="ec">0</span> Target: <span id="ecTarget">0</span> </div>
+      <div>PH: <span id="ph">0</span> Target: <span id="phTarget">0</span> </div>
     </div>
 
+  <div class="buttonGrid">
 
-<div class="section">
+    <button class="stateBtn" onclick="setState('/idle')">IDLE</button>
+    <button class="stateBtn" id="waterBtn" onclick="setState('/water')">WATER</button>
 
-<div class="timerRow">
-  <div class="timerLabel">Cycle</div>
-  <input id="idle" class="timerValue" type="number" min="0">
-  <span>min</span>
+    <button class="stateBtn" id="measureBtn" onclick="setState('/measure')">MEASURE</button>
+    <button class="stateBtn" id="regulateBtn" onclick="setState('/regulate')">REGULATE</button>
+
+    <button class="stateBtn" id="flushBtn" onclick="setState('/flush')">FLUSH</button>
+    <button class="stateBtn" id="calibrateBtn" onclick="setState('/calibrate')">CALIBRATE</button>
+    </div>
+
+  </div>
+
 </div>
 
-<div class="timerRow">
-  <div class="timerLabel">Water</div>
-  <input id="water" class="timerValue" type="number" min="0">
-  <span>min</span>
-</div>
+<!-- ================= PARAM TAB ================= -->
 
-<div class="timerRow">
-  <div class="timerLabel">Flush</div>
-  <input id="flush" class="timerValue" type="number" min="0">
-  <span>min</span>
-</div>
+<div id="param" class="tab">
 
-  <button onclick="save()">Save Timers</button>
-</div>
+  <div class="section">
 
-<div class="section">
-  <h3>State Machine Control</h3>
-  <button onclick="setState('/idle')">IDLE</button>
-  <button id="waterBtn" onclick="setState('/water')">WATER</button>
-  <button id="measureBtn" onclick="setState('/measure')">MEASURE</button>
-  <button id="regulateBtn" onclick="setState('/regulate')">REGULATE</button>
-  <button id="flushBtn" onclick="setState('/flush')">FLUSH</button>
-  <button id="calibrateBtn" onclick="setState('/calibrate')">CALIBRATE</button>
-</div>
+    <div class="timerRow">
+      <div class="timerLabel">EC Target</div>
+      <input id="ecReg" class="timerValue" type="number" step="0.01">
+    </div>
+
+    <div class="timerRow">
+      <div class="timerLabel">PH Target</div>
+      <input id="phReg" class="timerValue" type="number" step="0.01">
+    </div>
+
+    <div class="timerRow">
+      <div class="timerLabel">Cycle</div>
+      <input id="idle" class="timerValue" type="number" min="0">
+      <span>min</span>
+    </div>
+
+    <div class="timerRow">
+      <div class="timerLabel">Water</div>
+      <input id="water" class="timerValue" type="number" min="0">
+      <span>min</span>
+    </div>
+
+    <div class="timerRow">
+      <div class="timerLabel">Flush</div>
+      <input id="flush" class="timerValue" type="number" min="0">
+      <span>min</span>
+    </div>
+
+    <div class="timerRow">
+      <div class="timerLabel">Sleep</div>
+
+      <input id="sleepStartHour"
+            class="timerValue"
+            type="number"
+            min="0"
+            max="23"
+            placeholder="HH">
+
+      <span>:</span>
+
+      <input id="sleepStartMinute"
+            class="timerValue"
+            type="number"
+            min="0"
+            max="59"
+            placeholder="MM">
+    </div>
+
+    <div class="timerRow">
+      <div class="timerLabel">Wake</div>
+
+      <input id="sleepEndHour"
+            class="timerValue"
+            type="number"
+            min="0"
+            max="23"
+            placeholder="HH">
+
+      <span>:</span>
+
+      <input id="sleepEndMinute"
+            class="timerValue"
+            type="number"
+            min="0"
+            max="59"
+            placeholder="MM">
+    </div>
+
+    <button class="stateBtn" onclick="save()">Save</button>
+
+  </div>
 
 </div>
 
@@ -243,8 +386,10 @@ button { padding:10px; margin:5px; }
 
 <div id="graph" class="tab">
 
-  EC: <span id="ec">0</span><br>
-  PH: <span id="ph">0</span><br>
+  <div class="dataBlock">
+    <div>EC: <span id="ecGraph">0</span></div>
+    <div>PH: <span id="phGraph">0</span></div>
+  </div>
 
   <canvas id="chartEC"></canvas>
   <canvas id="chartPH"></canvas>
@@ -252,10 +397,12 @@ button { padding:10px; margin:5px; }
 </div>
 
 <!-- ================= MONITOR TAB ================= -->
+
 <div id="monitor" class="tab">
 
   <div style="display:flex; justify-content:center;">
-    <pre id="log" style="text-align:left;width:300px;height:600px;overflow:auto;background:transparent;color:black;"></pre>
+    <pre id="log"
+style="text-align:left;width:300px;height:600px;overflow:auto;background:transparent;color:black;"></pre>
   </div>
 
 </div>
@@ -301,8 +448,25 @@ async function save(){
   let idle = document.getElementById('idle').value;
   let water = document.getElementById('water').value;
   let flush = document.getElementById('flush').value;
+  let ecReg = document.getElementById('ecReg').value;
+  let phReg = document.getElementById('phReg').value;
+  let sh = document.getElementById('sleepStartHour').value;
+  let sm = document.getElementById('sleepStartMinute').value;
+  let eh = document.getElementById('sleepEndHour').value;
+  let em = document.getElementById('sleepEndMinute').value;
 
-  await fetch(`/set?idle=${idle}&water=${water}&flush=${flush}`);
+  await fetch(
+    `/set?idle=${idle}` +
+    `&water=${water}` +
+    `&flush=${flush}` +
+    `&sh=${sh}` +
+    `&sm=${sm}` +
+    `&eh=${eh}` +
+    `&em=${em}` +
+    `&ec=${ecReg}` +
+    `&ph=${phReg}`
+  );
+ 
 }
 
 let chartEC = new Chart(document.getElementById('chartEC'), {
@@ -355,6 +519,9 @@ async function update(){
   document.getElementById('timer').innerText = d.timer;
   document.getElementById('time').innerText = d.time;
 
+  document.getElementById('ecTarget').innerText = d.ecReg;
+  document.getElementById('phTarget').innerText = d.phReg;
+
   chartEC.data.labels = d.labels;
   chartEC.data.datasets[0].data = d.ec_hist;
   chartEC.update();
@@ -364,9 +531,17 @@ async function update(){
   chartPH.update();
 
   if (!initDone) {
+
     document.getElementById('idle').value = d.idle;
     document.getElementById('water').value = d.water;
     document.getElementById('flush').value = d.flush;
+    document.getElementById('sleepStartHour').value = d.sh;
+    document.getElementById('sleepStartMinute').value = d.sm;
+    document.getElementById('sleepEndHour').value = d.eh;
+    document.getElementById('sleepEndMinute').value = d.em;
+    document.getElementById('ecReg').value = d.ecReg;
+    document.getElementById('phReg').value = d.phReg;
+
     initDone = true;
   }
 
@@ -388,6 +563,7 @@ showTab('main');
 </script>
 
 </body>
+
 </html>
 )rawliteral";
 
@@ -470,22 +646,6 @@ void connectWiFi()
   }
 }
 
-
-// ==================================================
-// DATE TIME
-// ==================================================
-String getTimeString()
-{
-  struct tm timeinfo;
-
-  if(!getLocalTime(&timeinfo))
-    return "--:--:--";
-
-  char buf[30];
-  strftime(buf, sizeof(buf), "%H:%M:%S", &timeinfo);
-  return String(buf);
-}
-
 // ==================================================
 // JSON
 // ==================================================
@@ -503,6 +663,12 @@ String buildJson()
   json += "\"idle\":" + String(cylce_time_minutes) + ",";
   json += "\"water\":" + String(watering_minutes) + ",";
   json += "\"flush\":" + String(flush_minutes) + ",";
+  json += "\"sh\":" + String(sleep_start_hour) + ",";
+  json += "\"sm\":" + String(sleep_start_minute) + ",";
+  json += "\"eh\":" + String(sleep_end_hour) + ",";
+  json += "\"em\":" + String(sleep_end_minute) + ",";
+  json += "\"ecReg\":" + String(ec_regulator, 2) + ",";
+  json += "\"phReg\":" + String(ph_regulator, 2) + ",";
 
   const char* img;
 
@@ -593,6 +759,24 @@ void setupRoutes()
 
     if(req->hasParam("flush"))
       flush_minutes = req->getParam("flush")->value().toInt();
+
+    if(req->hasParam("sh"))
+      sleep_start_hour = req->getParam("sh")->value().toInt();
+
+    if(req->hasParam("sm"))
+      sleep_start_minute = req->getParam("sm")->value().toInt();
+
+    if(req->hasParam("eh"))
+      sleep_end_hour = req->getParam("eh")->value().toInt();
+
+    if(req->hasParam("em"))
+      sleep_end_minute = req->getParam("em")->value().toInt();
+
+    if(req->hasParam("ec"))
+      ec_regulator = req->getParam("ec")->value().toFloat();
+
+    if(req->hasParam("ph"))
+      ph_regulator = req->getParam("ph")->value().toFloat();
 
     web_log("Timers updated");
     req->send(200, "text/plain", "OK");

@@ -8,10 +8,6 @@ void web_loop();
 void web_add_data(float ec, float ph);
 void web_log(const String &msg);
 
-// pump parameters
-extern int pump_on_minutes;
-extern int pump_cycle_minutes;
-
 // shared command from web → main
 enum system_cmd_t {
   CMD_NONE,

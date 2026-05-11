@@ -7,10 +7,6 @@ class fsm_t;
 
 // ---------------- Base State ----------------
 
-extern int cylce_time_minutes;
-extern int watering_minutes;
-extern int flush_minutes;
-
 class State {
 public:
   void onEnter(fsm_t &fsm)
@@ -42,12 +38,29 @@ public:
     }
   }
 
+  void setStart() {
+      stop  = false;
+      error = false;
+  }
+
+  void setStop() {
+      stop = true;
+  }
+
+  void setError() {
+      error = true;
+  }
+
+  bool isSleepTime();
+  void event1sec();
+
   scheduler_t &scheduler() { return _s; }
 
   // ---- flags ----
   bool deviation_detected = true;
+
+  bool stop = false;
   bool error = false;
-  bool error_ack = false;
 
   const char* stateName() const;
 
