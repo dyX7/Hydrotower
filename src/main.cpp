@@ -126,18 +126,25 @@ void sensorProcess()
         // remove later
         static float ecSim = 1.8;
         static float phSim = 6.0;
+        static float tempSim = 24.0;
+
         ecSim += random(-5, 6) / 100.0;
         phSim += random(-3, 4) / 100.0;
+        tempSim += random(-3, 4) / 100.0;
+
         // clamp values
         if(ecSim < 0.8) ecSim = 0.8;
         if(ecSim > 2.4) ecSim = 2.4;
         if(phSim < 5.5) phSim = 5.5;
         if(phSim > 7.0) phSim = 7.0;
+        if(tempSim < 18.0) tempSim = 18.0;
+        if(tempSim > 30.0) tempSim = 30.0;
 
         ec = ecSim;
         ph = phSim;
+        ecTemp = tempSim;
 
-        web_add_data(ec, ph);
+        web_add_data(ec, ph, ecTemp);
 
         // Serial.print("EC: "); Serial.print(ec);
         // Serial.print(" | PH: "); Serial.println(ph);

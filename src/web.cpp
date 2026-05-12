@@ -22,6 +22,7 @@ int flush_minutes = 3;
 
 float ec_regulator = 1.80;
 float ph_regulator = 6.00;
+float waterTemp = 0;
 
 int sleep_start_hour = 22;
 int sleep_start_minute = 0;
@@ -33,7 +34,7 @@ volatile system_cmd_t system_cmd = CMD_NONE;
 
 // ---------------- DATA ----------------
 extern float ec, ph;
-extern float ecTemp, phTemp;
+
 extern fsm_t fsm;
 extern uint32_t remaining_seconds;
 
@@ -47,6 +48,7 @@ int logIndex = 0;
 #define MAX_POINTS 60
 float ec_hist[MAX_POINTS];
 float ph_hist[MAX_POINTS];
+float temp_hist[MAX_POINTS];
 int hist_index = 0;
 bool hist_full = false;
 
@@ -79,10 +81,12 @@ void web_log(const String &msg)
 // ==================================================
 // DATA BUFFER
 // ==================================================
-void web_add_data(float ec_v, float ph_v)
+void web_add_data(float ec_v, float ph_v, float temp)
 {
   ec_hist[hist_index] = ec_v;
   ph_hist[hist_index] = ph_v;
+  temp_hist[hist_index] = temp;
+  waterTemp = temp;
 
   hist_index = (hist_index + 1) % MAX_POINTS;
   if(hist_index == 0) hist_full = true;
@@ -149,20 +153,14 @@ button { padding:10px; margin:5px; }
   justify-content: center;
 }
 
-#chart {
-  width: 300px !important;
-  height: 200px !important;
-  margin: auto;
-}
-
 .timerLabel {
   width: 120px;
   text-align: center;
 }
 
-#chartEC, #chartPH {
-  width: 300px !important;
-  height: 200px !important;
+#chartEC, #chartPH, #chartTEMP {
+  width: 400px !important;
+  height: 150px !important;
   margin: 10px auto;
   display: block;
 }
@@ -278,16 +276,20 @@ button { padding:10px; margin:5px; }
       <div><span id="timerControl">0</span> s</div>
 
       <div class="dataBlock">
-        <div>
-          EC: <span id="ecControlValue">0</span>
-          [<span id="ecTargetControl">0</span>]
-        </div>
+          <div>
+            TEMP: <span id="tempControlValue">0</span> &deg;C
+          </div>
 
-        <div>
-          PH: <span id="phControlValue">0</span>
-          [<span id="phTargetControl">0</span>]
-        </div>
-    </div>
+          <div>
+            EC: <span id="ecControlValue">0</span> 
+            [<span id="ecTargetControl">0</span>] mS/cm
+          </div>
+
+          <div>
+            PH: <span id="phControlValue">0</span>
+            [<span id="phTargetControl">0</span>]
+          </div>
+      </div>
 
     <div class="buttonGrid">
 
@@ -315,21 +317,9 @@ button { padding:10px; margin:5px; }
     <div id="stateGraph">---</div>
     <div><span id="timerGraph">0</span> s</div>
 
-    <div class="dataBlock">
-      <div>
-        EC: <span id="ecGraphValue">0</span>
-        [<span id="ecTargetGraph">0</span>]
-      </div>
-
-      <div>
-        PH: <span id="phGraphValue">0</span>
-        [<span id="phTargetGraph">0</span>]
-      </div>
-    </div>
-
     <canvas id="chartEC"></canvas>
     <canvas id="chartPH"></canvas>
-
+    <canvas id="chartTEMP"></canvas>
   </div>
 </div>
 
@@ -613,6 +603,58 @@ let chartPH = new Chart(document.getElementById('chartPH'), {
   }
 });
 
+let chartTEMP = new Chart(document.getElementById('chartTEMP'), {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+
+      {
+        label: 'Temperature',
+        data: [],
+        borderColor: '#FF9800',
+        backgroundColor: 'rgba(255, 152, 0, 0.2)',
+        borderWidth: 2,
+        tension: 0.3,
+
+        pointRadius: 1,
+        pointHoverRadius: 3
+      }
+
+    ]
+  },
+
+  options: {
+    responsive: false,
+    maintainAspectRatio: false,
+
+    plugins: {
+      legend: {
+        display: true
+      }
+    },
+
+    scales: {
+      y: {
+        min: 18,
+        max: 30,
+
+        title: {
+          display: true,
+          text: 'degC'
+        }
+      },
+
+      x: {
+        title: {
+          display: true,
+          text: 'Samples'
+        }
+      }
+    }
+  }
+});
+
 let initDone = false;
 
 async function update(){
@@ -624,6 +666,7 @@ async function update(){
   document.getElementById('stateControl').innerText = d.state;
   document.getElementById('ecControlValue').innerText = d.ec;
   document.getElementById('phControlValue').innerText = d.ph;
+  document.getElementById('tempControlValue').innerText = d.temp;
   document.getElementById('timerControl').innerText = d.timer;
 
   document.getElementById('ecTargetControl').innerText = d.ecReg;
@@ -631,31 +674,25 @@ async function update(){
 
   // GRAPH TAB
   document.getElementById('stateGraph').innerText = d.state;
-  document.getElementById('ecGraphValue').innerText = d.ec;
-  document.getElementById('phGraphValue').innerText = d.ph;
   document.getElementById('timerGraph').innerText = d.timer;
-
-  document.getElementById('ecTargetGraph').innerText = d.ecReg;
-  document.getElementById('phTargetGraph').innerText = d.phReg;
-
 
   // EC GRAPH
   chartEC.data.labels = d.labels;
   chartEC.data.datasets[0].data = d.ec_hist;
-
-  // horizontal target line
-  chartEC.data.datasets[1].data =
-      d.labels.map(() => d.ecReg);
+  chartEC.data.datasets[1].data = d.labels.map(() => d.ecReg);
   chartEC.update();
 
   // PH GRAPH
   chartPH.data.labels = d.labels;
   chartPH.data.datasets[0].data = d.ph_hist;
-
-  // horizontal target line
-  chartPH.data.datasets[1].data =
-      d.labels.map(() => d.phReg);
+  chartPH.data.datasets[1].data = d.labels.map(() => d.phReg);
   chartPH.update();
+
+  // temperature GRAPH
+  chartTEMP.data.labels = d.labels;
+  chartTEMP.data.datasets[0].data = d.temp_hist;
+  chartTEMP.update();
+
 
   if (!initDone) {
 
@@ -784,8 +821,11 @@ String buildJson()
   const char* stateName = fsm.stateName();
   json += "\"state\":\"" + String(stateName ? stateName : "UNKNOWN") + "\",";
   json += "\"timer\":" + String(remaining_seconds) + ",";
+
   json += "\"ec\":" + String(ec, 2) + ",";
   json += "\"ph\":" + String(ph, 2) + ",";
+  json += "\"temp\":" + String(waterTemp, 2) + ",";
+
   json += "\"time\":\"" + getTimeString() + "\",";
   json += "\"idle\":" + String(cylce_time_minutes) + ",";
   json += "\"water\":" + String(watering_minutes) + ",";
@@ -837,6 +877,14 @@ String buildJson()
   json += "\"ph_hist\":[";
   for(int i = 0; i < count; i++){
     json += String(ph_hist[i], 2);
+    if(i < count - 1) json += ",";
+  }
+  json += "],";
+
+  // Temperature history
+  json += "\"temp_hist\":[";
+  for(int i = 0; i < count; i++){
+    json += String(temp_hist[i], 2);
     if(i < count - 1) json += ",";
   }
   json += "]";

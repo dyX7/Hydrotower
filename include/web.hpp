@@ -5,7 +5,7 @@ void web_init();
 void web_loop();
 
 // data logging
-void web_add_data(float ec, float ph);
+void web_add_data(float ec, float ph, float temp);
 void web_log(const String &msg);
 
 // shared command from web → main
