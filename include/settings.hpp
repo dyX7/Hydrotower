@@ -1,6 +1,22 @@
 #pragma once
 #include "pin.hpp"
 
+enum class pumps_t : uint8_t
+{
+  MAIN_PUMP,
+  PH_PLUS,
+  PH_MINUS,
+  FERTILIZER_A,
+  FERTILIZER_B
+};
+
+enum class pump_dir : uint8_t
+{
+  STOP,
+  PUMP,
+  REVERSE
+};
+
 // ------------ GPIO Pins ----------------
 extern const pin_t pinLed2;
 extern const pin_t pinLed1;
@@ -9,10 +25,14 @@ extern const pin_t gpioEc2;
 extern const pin_t gpioPh1;
 extern const pin_t gpioPh2;
 extern const pin_t pinPwmMot1;
-extern const pin_t pinPwmMot2;
-extern const pin_t pinPwmMot3;
-extern const pin_t pinPwmMot4;
-extern const pin_t pinPwmMot5;
+extern const pin_t pinPwmMot2Dose;
+extern const pin_t pinPwmMot2Rev;
+extern const pin_t pinPwmMot3Dose;
+extern const pin_t pinPwmMot3Rev;
+extern const pin_t pinPwmMot4Dose;
+extern const pin_t pinPwmMot4Rev;
+extern const pin_t pinPwmMot5Dose;
+extern const pin_t pinPwmMot5Rev;
 
 extern uint8_t img_test[];
 extern const char img_idle[];
@@ -36,11 +56,15 @@ extern gpio_out_t gpioEcMeasure1;
 extern gpio_out_t gpioEcMeasure2;
 extern gpio_out_t gpioPhMeasure1;
 extern gpio_out_t gpioPhMeasure2;
-extern gpio_out_t pwmMotor1;
-extern gpio_out_t pwmMotor2;
-extern gpio_out_t pwmMotor3;
-extern gpio_out_t pwmMotor4;
-extern gpio_out_t pwmMotor5;
+extern gpio_out_t pwmMainPump;
+extern gpio_out_t pwmPHplusDose;
+extern gpio_out_t pwmPHplusRev;
+extern gpio_out_t pwmPHminusDose;
+extern gpio_out_t pwmPHminusRev;
+extern gpio_out_t pwmFertilizerADose;
+extern gpio_out_t pwmFertilizerARev;
+extern gpio_out_t pwmFertilizerBDose;
+extern gpio_out_t pwmFertilizerBRev;
 
 // ---------------- Config ----------------
 struct temp_cfg_t {
@@ -50,9 +74,9 @@ struct temp_cfg_t {
 };
 
 struct cal_point_t {
+  float value;
+  float voltage;
   float temp;
-  float v_p1;
-  float v_p2;
 };
 
 // ---------------- Constants ----------------
@@ -71,21 +95,15 @@ extern const float EC_A;
 extern const float EC_B;
 
 // ---------------- Calibration ----------------
-extern const cal_point_t ph_cal_1;
-extern const cal_point_t ph_cal_2;
+extern cal_point_t ph_cal_1;
+extern cal_point_t ph_cal_2;
+extern cal_point_t ec_cal_1;
+extern cal_point_t ec_cal_2;
 
-extern const float slopePh1;
-extern const float slopePh2;
-extern const float offsetPh1;
-extern const float offsetPh2;
-
-extern const cal_point_t ec_cal_1;
-extern const cal_point_t ec_cal_2;
-
-extern const float slopeEc1;
-extern const float slopeEc2;
-extern const float offsetEc1;
-extern const float offsetEc2;
+extern bool ph_cal_valid_1;
+extern bool ph_cal_valid_2;
+extern bool ec_cal_valid_1;
+extern bool ec_cal_valid_2;
 
 extern const temp_cfg_t ec_temp_cfg;
 extern const temp_cfg_t ph_temp_cfg;

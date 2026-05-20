@@ -157,7 +157,7 @@ bool scheduler_t::setInterval(task_t &task, Time t)
       tasks[i].interval = t.us;
       tasks[i].lastRun = micros();
 
-      web_log(String("SCHED ⟳ ") + task.name + " set " + formatTime(t.us));
+      // web_log(String("SCHED ⟳ ") + task.name + " set " + formatTime(t.us));
 
       return true;
     }
