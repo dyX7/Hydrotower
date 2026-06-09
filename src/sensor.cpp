@@ -6,17 +6,27 @@ bool _read_sensors = false;
 
 float ecTempMeasure = 0;
 float phTempMeasure = 0;
+float meanTemp = 0;
 float ecMeasure = 0;
 float phMeasure = 0;
+float vEcMeasure = 0;
+float vPhMeasure = 0;
 
-MovingMean ecFilter(10);
-MovingMean phFilter(10);
+MovingMean ecFilter(25);
+MovingMean phFilter(25);
 
-// external calibration/state (must exist in another .cpp or settings.cpp)
-bool ph_cal_valid_1{false};
-bool ph_cal_valid_2{false};
-bool ec_cal_valid_1{false};
-bool ec_cal_valid_2{false};
+MovingMean ecTempFilter(100);
+MovingMean phTempFilter(100);
+
+MovingMean ecVoltFilter(100);
+MovingMean phVoltFilter(100);
+
+point_t active_calib_point{point_t::COUNT};
+bool ph_cal_1_valid{false};
+bool ph_cal_2_valid{false};
+bool ec_cal_1_valid{false};
+bool ec_cal_2_valid{false};
+bool active_history{false};
 
 // ===================== HELPERS =====================
 float readVoltage(const pin_t& pin) {
@@ -25,13 +35,23 @@ float readVoltage(const pin_t& pin) {
 }
 
 // ===================== TEMPERATURE =====================
-float readTemperature(const pin_t& pin, const temp_cfg_t &cfg) {
+float readTemperature(const pin_t& pin, const temp_cfg_t &cfg)
+{
     auto value = analogRead(pin.idx);
 
-    float r_measure = cfg.r1_series * (VREF / value - 1.0f);
+    if(value <= 0)
+        return 25.0f;
+
+    float r_measure =
+        cfg.r1_series * (VREF / value - 1.0f);
+
+    if(r_measure <= 0)
+        return 25.0f;
+
     float tempK = 1.0f / (
         (1.0f / TEMP0_K) +
-        (1.0f / cfg.beta) * log(r_measure / cfg.r0_temp)
+        (1.0f / cfg.beta) *
+        log(r_measure / cfg.r0_temp)
     );
 
     return tempK - 273.15f;
@@ -58,56 +78,110 @@ float linearCalibrate(float voltage, const cal_point_t& p1, const cal_point_t& p
 
 // ===================== EC =====================
 float readEC(const pin_t& pin) {
-    if (!ec_cal_valid_1 || !ec_cal_valid_2) return 0.0f;
+    // 1. RAW voltage (EC channel)
+    vEcMeasure = readVoltage(pin);
 
-    float voltage = readVoltage(pin);
-    float ec = linearCalibrate(voltage, ec_cal_1, ec_cal_2);
+    // 2. Safety: no calibration yet
+    if (!ec_cal_1_valid || !ec_cal_2_valid)
+        return 0.0f;
 
-    return applyEcTemperatureCompensation(ec, ecTempMeasure);
+    // 3. Convert voltage → EC using calibration
+    float ec = linearCalibrate(vEcMeasure, ec_cal_1, ec_cal_2);
+
+    // 4. Temperature compensation (ONLY EC uses this)
+    ec = applyEcTemperatureCompensation(ec, ecTempMeasure);
+
+    return ec;
 }
 
 
 // ===================== PH =====================
 float readPH(const pin_t& pin) {
-    if (!ph_cal_valid_1 || !ph_cal_valid_2) return 0.0f;
+    // 1. RAW voltage (PH channel)
+    vPhMeasure = readVoltage(pin);
 
-    float voltage = readVoltage(pin);
-    float ph = linearCalibrate(voltage, ph_cal_1, ph_cal_2);
+    // 2. Safety: no calibration yet
+    if (!ph_cal_1_valid || !ph_cal_2_valid)
+        return 0.0f;
 
-    return applyEcTemperatureCompensation(ph, phTempMeasure);
+    // 3. Convert voltage → pH using calibration
+    float ph = linearCalibrate(vPhMeasure, ph_cal_1, ph_cal_2);
+
+    // 4. IMPORTANT:
+    // DO NOT apply EC temperature compensation to pH
+    // do Nernst Equation for temperature compensation
+    // (pH temperature compensation is different chemistry and not linear like EC)
+
+    return ph;
 }
 
 // ===================== CALIBRATION SETTERS =====================
-void setPhCalibration(int index, float ph_value) {
-    cal_point_t point;
-    point.value = ph_value;
-    point.voltage = readVoltage(adcPh);
-    point.temp = phTempMeasure;
-
-    if (index == 1) {
-        ph_cal_1 = point;
-        ph_cal_valid_1 = true;
-    } else {
-        ph_cal_2 = point;
-        ph_cal_valid_2 = true;
-    }
+void setActiveCalibration(point_t point)
+{
+    active_calib_point = point;
 }
 
-void setEcCalibration(int index, float ec_value) {
-    cal_point_t point;
-    point.value = ec_value;
-    point.voltage = readVoltage(adcEc);
-    point.temp = ecTempMeasure;
-
-    if (index == 1) {
-        ec_cal_1 = point;
-        ec_cal_valid_1 = true;
-    } else {
-        ec_cal_2 = point;
-        ec_cal_valid_2 = true;
+void applyCalibration()
+{
+    switch(active_calib_point)
+    {
+        case point_t::PH1:
+        {
+            ph_cal_1.voltage = phVoltFilter.get();
+            ph_cal_1.temp = phTempFilter.get();
+            ph_cal_1_valid = true;
+            savePhCalibration1();
+            break;
+        }
+        case point_t::PH2:
+        {
+            ph_cal_2.voltage = phVoltFilter.get();
+            ph_cal_2.temp = phTempFilter.get();
+            ph_cal_2_valid = true;
+            savePhCalibration2();
+            break;
+        }
+        case point_t::EC1:
+        {
+            ec_cal_1.voltage = ecVoltFilter.get();
+            ec_cal_1.temp = ecTempFilter.get();
+            ec_cal_1_valid = true;
+            saveEcCalibration1();
+            break;
+        }
+        case point_t::EC2:
+        {
+            ec_cal_2.voltage = ecVoltFilter.get();
+            ec_cal_2.temp = ecTempFilter.get();
+            ec_cal_2_valid = true;
+            saveEcCalibration2();
+            break;
+        }
     }
+
+    // reset active point
+    setActiveCalibration(point_t::COUNT);
 }
 
+void tempProcess()
+{               
+    ecTempMeasure = ecTempFilter.update(readTemperature(adcEcTemp, ec_temp_cfg));
+    phTempMeasure = phTempFilter.update(readTemperature(adcPhTemp, ph_temp_cfg));
+
+    static float tempSimEc = 24.0;
+    static float tempSimPh = 24.0;
+    tempSimEc += random(-3, 4) / 100.0;
+    tempSimPh += random(-3, 4) / 100.0;
+    if(tempSimEc < 18.0) tempSimEc = 18.0;
+    if(tempSimEc > 30.0) tempSimEc = 30.0;
+    if(tempSimPh < 18.0) tempSimPh = 18.0;
+    if(tempSimPh > 30.0) tempSimPh = 30.0;
+    
+    ecTempMeasure = tempSimEc;
+    phTempMeasure = tempSimPh;
+
+    meanTemp = (ecTempMeasure + phTempMeasure) / 2.0f;
+}
 
 // ===================== SENSOR PROCESS =====================
 enum phase_t { CONTROL, WAIT, READ };
@@ -124,9 +198,6 @@ void sensorProcess() {
             gpioEcMeasure1.set(!polarity);
             gpioEcMeasure2.set(polarity);
 
-            gpioPhMeasure1.set(!polarity);
-            gpioPhMeasure2.set(polarity);
-
             phase = WAIT;
             break;
 
@@ -137,8 +208,8 @@ void sensorProcess() {
         case READ:
             if (_read_sensors) {
 
-                ecTempMeasure = readTemperature(adcEcTemp, ec_temp_cfg);
-                phTempMeasure = readTemperature(adcPhTemp, ph_temp_cfg);
+                // process temp before sensors
+                tempProcess();
 
                 ecMeasure = ecFilter.update(readEC(adcEc));
                 phMeasure = phFilter.update(readPH(adcPh));
@@ -148,32 +219,48 @@ void sensorProcess() {
                 // remove later
                 static float ecSim = 1.8;
                 static float phSim = 6.0;
-                static float tempSimEc = 24.0;
-                static float tempSimPh = 24.0;
-
+                
                 ecSim += random(-5, 6) / 100.0;
                 phSim += random(-3, 4) / 100.0;
-                tempSimEc += random(-3, 4) / 100.0;
-                tempSimPh += random(-3, 4) / 100.0;
 
                 // clamp values
                 if(ecSim < 0.8) ecSim = 0.8;
                 if(ecSim > 2.4) ecSim = 2.4;
                 if(phSim < 5.5) phSim = 5.5;
                 if(phSim > 7.0) phSim = 7.0;
-                if(tempSimEc < 18.0) tempSimEc = 18.0;
-                if(tempSimEc > 30.0) tempSimEc = 30.0;
-                if(tempSimPh < 18.0) tempSimPh = 18.0;
-                if(tempSimPh > 30.0) tempSimPh = 30.0;
-
+                
                 ecMeasure = ecSim;
                 phMeasure = phSim;
-                ecTempMeasure = tempSimEc;
-                phTempMeasure = tempSimPh;
 
-                auto meanTemp = (ecTempMeasure + phTempMeasure) / 2.0f;
+                vEcMeasure = 0.8f + (ecSim * 0.6f);
+                vPhMeasure = 2.5f - (phSim * 0.3f);
 
-                web_add_data(ecMeasure, phMeasure, meanTemp);
+                // in case of calibration
+                if(active_calib_point != point_t::COUNT)
+                {
+                    switch(active_calib_point)
+                    {
+                        case point_t::PH1:
+                        case point_t::PH2:
+                        {
+                            phVoltFilter.update(vPhMeasure);
+                            phTempFilter.update(phTempMeasure);
+                            break;
+                        }
+                        case point_t::EC1:
+                        case point_t::EC2:
+                        {
+                            ecVoltFilter.update(vEcMeasure);
+                            ecTempFilter.update(ecTempMeasure);
+                            break;
+                        }
+                    }
+                }
+                else if(active_history)
+                {
+                    web_add_data_hist(ecMeasure, phMeasure, meanTemp);
+                }
+
             }
             phase = CONTROL;
             break;

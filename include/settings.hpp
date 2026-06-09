@@ -22,8 +22,6 @@ extern const pin_t pinLed2;
 extern const pin_t pinLed1;
 extern const pin_t gpioEc1;
 extern const pin_t gpioEc2;
-extern const pin_t gpioPh1;
-extern const pin_t gpioPh2;
 extern const pin_t pinPwmMot1;
 extern const pin_t pinPwmMot2Dose;
 extern const pin_t pinPwmMot2Rev;
@@ -33,14 +31,6 @@ extern const pin_t pinPwmMot4Dose;
 extern const pin_t pinPwmMot4Rev;
 extern const pin_t pinPwmMot5Dose;
 extern const pin_t pinPwmMot5Rev;
-
-extern uint8_t img_test[];
-extern const char img_idle[];
-extern const char img_water[];
-extern const char img_measure[];
-extern const char img_regulate[];
-extern const char img_flush[];
-extern const char img_calibrate[];
 
 // ----------- Analog Pins ----------------
 extern const pin_t adcEc;
@@ -54,17 +44,19 @@ extern gpio_out_t led2;
 
 extern gpio_out_t gpioEcMeasure1;
 extern gpio_out_t gpioEcMeasure2;
-extern gpio_out_t gpioPhMeasure1;
-extern gpio_out_t gpioPhMeasure2;
-extern gpio_out_t pwmMainPump;
-extern gpio_out_t pwmPHplusDose;
-extern gpio_out_t pwmPHplusRev;
-extern gpio_out_t pwmPHminusDose;
-extern gpio_out_t pwmPHminusRev;
-extern gpio_out_t pwmFertilizerADose;
-extern gpio_out_t pwmFertilizerARev;
-extern gpio_out_t pwmFertilizerBDose;
-extern gpio_out_t pwmFertilizerBRev;
+
+extern gpio_out_t gpioMainPump;
+
+extern pwm_out_t pwmPHplusDose;
+extern pwm_out_t pwmPHplusRev;
+extern pwm_out_t pwmPHminusDose;
+extern pwm_out_t pwmPHminusRev;
+extern pwm_out_t pwmFertilizerADose;
+extern pwm_out_t pwmFertilizerARev;
+extern pwm_out_t pwmFertilizerBDose;
+extern pwm_out_t pwmFertilizerBRev;
+
+
 
 // ---------------- Config ----------------
 struct temp_cfg_t {
@@ -100,10 +92,10 @@ extern cal_point_t ph_cal_2;
 extern cal_point_t ec_cal_1;
 extern cal_point_t ec_cal_2;
 
-extern bool ph_cal_valid_1;
-extern bool ph_cal_valid_2;
-extern bool ec_cal_valid_1;
-extern bool ec_cal_valid_2;
+extern bool ph_cal_1_valid;
+extern bool ph_cal_2_valid;
+extern bool ec_cal_1_valid;
+extern bool ec_cal_2_valid;
 
 extern const temp_cfg_t ec_temp_cfg;
 extern const temp_cfg_t ph_temp_cfg;

@@ -1,0 +1,62 @@
+BasedOnStyle: LLVM
+
+# ===================== INDENTATION =====================
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+
+# ===================== BRACES =====================
+BreakBeforeBraces: Attach
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: InlineOnly
+
+# ===================== SPACING =====================
+SpaceAfterCStyleCast: true
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SpacesInCStyleCastParentheses: false
+
+# ===================== LINE LENGTH =====================
+ColumnLimit: 100
+
+# ===================== POINTER STYLE =====================
+PointerAlignment: Left
+
+# int* ptr  (NOT int *ptr or int * ptr)
+
+# ===================== FUNCTIONS =====================
+AllowShortFunctionsOnASingleLine: InlineOnly
+BinPackParameters: false
+BinPackArguments: false
+
+# ===================== BREAKS =====================
+AlwaysBreakTemplateDeclarations: Yes
+BreakConstructorInitializers: BeforeComma
+
+# ===================== NAMESPACES =====================
+NamespaceIndentation: None
+
+# ===================== CLASSES =====================
+BreakBeforeInheritanceComma: false
+
+# ===================== PREPROCESSOR =====================
+IndentPPDirectives: None
+
+# ===================== COMMENTS =====================
+ReflowComments: false
+
+# ===================== MISC =====================
+SortIncludes: false
+FixNamespaceComments: false
+
+# ===================== ENUMS =====================
+AllowShortEnumsOnASingleLine: false
+
+# ===================== ALIGNMENT =====================
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+
+# ===================== MODERN C++ =====================
+DerivePointerAlignment: false

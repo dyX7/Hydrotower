@@ -16,9 +16,13 @@ inline Time minToTime(int minutes)
   return Time::sec(minutes * 60);
 }
 
+State* activeSubState = nullptr;
+
 int cycle_time_minutes;
 int watering_minutes;
 int flush_minutes;
+int flush_delay_seconds = 20;
+int reverse_seconds = 10;
 int fertilize_seconds;
 int ph_seconds;
 
@@ -27,6 +31,17 @@ float ec_tolerance;
 float ph_regulator;
 float ph_tolerance;
 
+bool added_fertilizer{false};
+bool added_ph_plus{false};
+bool added_ph_minus{false};
+
+bool stop_locked{false};
+void setStopLock(bool lock)
+{
+    web_log(String("Stop Lock ") + String(lock));
+    stop_locked = lock;
+}
+
 int sleep_start_hour;
 int sleep_start_minute;
 int sleep_end_hour;
@@ -34,13 +49,14 @@ int sleep_end_minute;
 
 uint32_t remaining_seconds = 0;
 
-// ---- tasks ----
 task_t led1_task            { "LED1" };
 task_t led2_task            { "LED2" };
 task_t t1_idle_task         { "WAIT" };
 task_t t21_watering_task    { "WATERING" };
 task_t t22_watering_delay   { "WATERING_DELAY" };
-task_t t9_flush_task        { "FLUSH" };
+task_t t8_flush_task        { "FLUSH" };
+task_t t9_flush_delay_task  { "FLUSH_DELAY" };
+task_t t10_reverse_task     { "REVERSE" };
 task_t t3_measure_task      { "MEASURE" };
 task_t t45_fertilize_task   { "FERTILIZE" };
 task_t t46_wait_task        { "REG_WAIT" };
@@ -54,13 +70,13 @@ Time led2_timeout{ Time::ms(100)};
 inline Time getCycleTime()        { return minToTime(cycle_time_minutes); }
 inline Time getWateringTimeout()  { return minToTime(watering_minutes); }
 inline Time getFlushTimeout()     { return minToTime(flush_minutes); }
+inline Time getFlushDelayTimeout(){ return Time::sec(flush_delay_seconds); }
 inline Time getFertilizeTimeout() { return Time::sec(fertilize_seconds); }
 inline Time getPhTimeout()        { return Time::sec(ph_seconds); }
+inline Time getReverseTimeout()   { return Time::sec(reverse_seconds); }
 inline bool fertilizerNeeded()    
 { 
-  auto regUP = ec_regulator + ec_tolerance;
-  auto regDOWN = ec_regulator - ec_tolerance;
-  if(ecMeasure < regDOWN || ecMeasure > regUP)
+  if(ecMeasure < (ec_regulator - ec_tolerance))
   {
     web_log(String("Fertilizer needed:\n\tcurrent=") + String(ecMeasure, 2) + "\n\ttarget=" + String(ec_regulator, 2) + "\n\ttol=" + String(ec_tolerance, 2));
     return true;
@@ -72,8 +88,8 @@ inline bool fertilizerNeeded()
 }
 
 inline bool phPlusNeeded()        
-{ auto reg = ph_regulator - ph_tolerance;
-  if(phMeasure < reg)
+{ 
+  if(phMeasure < (ph_regulator - ph_tolerance))
   {
     web_log(String("PH+ needed:\n\tcurrent=") + String(phMeasure, 2) + "\n\ttarget=" + String(ph_regulator, 2) + "\n\ttol=" + String(ph_tolerance, 2));
     return true;
@@ -86,8 +102,7 @@ inline bool phPlusNeeded()
 
 inline bool phMinusNeeded()       
 { 
-  auto reg = ph_regulator + ph_tolerance;
-  if(phMeasure > reg)     
+  if(phMeasure > (ph_regulator + ph_tolerance))     
   {
     web_log(String("PH- needed:\n\tcurrent=") + String(phMeasure, 2) + "\n\ttarget=" + String(ph_regulator, 2) + "\n\ttol=" + String(ph_tolerance, 2));
     return true;
@@ -99,7 +114,8 @@ inline bool phMinusNeeded()
 }
 
 Time t2_watering_timeout{getWateringTimeout()};
-Time t9_flush_timeout{getFlushTimeout()};
+Time t8_flush_timeout{getFlushTimeout()};
+Time t9_flush_delay_timeout{getFlushDelayTimeout()};
 Time t3_measure_timeout{Time::sec(3)};
 Time t45_fertilize_timeout{getFertilizeTimeout()};
 Time t46_wait_timeout{Time::sec(10)};
@@ -116,7 +132,7 @@ IdleState STATE_IDLE;
 
 WateringPumpState STATE_WATERING_PUMP;
 WateringWaitState STATE_WATERING_WAIT;
-WateringState     STATE_WATERING{scheduler};
+WateringState     STATE_WATERING{scheduler, activeSubState};
 
 MeasureState STATE_MEASURE;
 
@@ -124,40 +140,51 @@ Regulate1_FertilizerAState  STATE_REG1_FERT_A;
 Regulate2_WaitState         STATE_REG2_WAIT;
 Regulate3_FertilizerBState  STATE_REG3_FERT_B;
 RegulatePhState             STATE_REG_PH;
-RegulateState               STATE_REGULATE{scheduler};
+RegulateState               STATE_REGULATE{scheduler, activeSubState};
 
-FlushState STATE_FLUSH;
+FlushState     STATE_FLUSH{scheduler, activeSubState};
+FlushPumpState STATE_FLUSH_PUMP;
+FlushWaitState STATE_FLUSH_WAIT;
+FlushReverseState STATE_FLUSH_REVERSE;
 
-CalibrateEcState STATE_CALIBRATE_EC;
-CalibratePhState STATE_CALIBRATE_PH;
+CalibrateState STATE_CALIBRATE;
 
 
 // ==================================================
 // FSM helper
 // ==================================================
 
-const char* fsm_t::stateName() const {
-
+const char* fsm_t::stateName() const
+{
+  // ---------------- TOP LEVEL ----------------
   if (current == &STATE_INIT) return "INIT";
-  if (current == &STATE_CALIBRATE_EC) return "CALIBRATE_EC";
-  if (current == &STATE_CALIBRATE_PH) return "CALIBRATE_PH";
-
+  if (current == &STATE_STOP) return "STOP";
+  if (current == &STATE_IDLE) return "IDLE";
+  if (current == &STATE_CALIBRATE) return "CALIBRATE";
+  if (current == &STATE_MEASURE) return "MEASURE";
+  
+  // ---------------- SUB STATES (FLUSH) ----------------
+  if (current == &STATE_FLUSH) return "FLUSH";
+  if (current == &STATE_FLUSH_PUMP) return "FLUSH_PUMP";
+  if (current == &STATE_FLUSH_WAIT) return "FLUSH_WAIT";
+  if (current == &STATE_FLUSH_REVERSE) return "FLUSH_REVERSE";
+  
+  // ---------------- SUB STATES (WATERING) ----------------
   if (current == &STATE_WATERING) return "WATERING";
   if (current == &STATE_WATERING_PUMP) return "WATERING_PUMP";
   if (current == &STATE_WATERING_WAIT) return "WATERING_WAIT";
 
-  if (current == &STATE_MEASURE) return "MEASURE";
-
+  // ---------------- SUB STATES (REGULATE) ----------------
   if (current == &STATE_REGULATE) return "REGULATE";
-  if (current == &STATE_REG1_FERT_A) return "REG_FERT_A";
+  if (current == &STATE_REG1_FERT_A) return "FERT_A";
   if (current == &STATE_REG2_WAIT) return "REG_WAIT";
-  if (current == &STATE_REG3_FERT_B) return "REG_FERT_B";
-  if (current == &STATE_REG_PH) return "REG_PH";
-
-
-  if (current == &STATE_FLUSH) return "FLUSH";
-  if (current == &STATE_STOP) return "STOP";
-  if (current == &STATE_IDLE) return "IDLE";
+  if (current == &STATE_REG3_FERT_B) return "FERT_B";
+  if (current == &STATE_REG_PH)
+  {
+    if (STATE_REG_PH.mode == PhMode::PLUS) return "PH_PLUS";
+    if (STATE_REG_PH.mode == PhMode::MINUS) return "PH_MINUS";
+    return "PH";
+  }
 
   return "UNKNOWN";
 }
@@ -199,52 +226,62 @@ bool fsm_t::isSleepTime()
   return result;
 }
 
+void fsm_t::eventCalib()
+{
+  tempProcess();
+}
+
 void fsm_t::event1sec()
 {
   struct tm timeinfo;
+
+  tempProcess();
 
   if(!getLocalTime(&timeinfo))
   {
     return;
   }
 
-  int nowMinutes =
-      timeinfo.tm_hour * 60 +
-      timeinfo.tm_min;
-
-  int startMinutes =
-      sleep_start_hour * 60 +
-      sleep_start_minute;
-
-  int endMinutes =
-      sleep_end_hour * 60 +
-      sleep_end_minute;
-
-  bool sleep = isSleepTime();
-
-  // ---------------- STATE CHANGE TRACKING ----------------
-  static bool lastSleep = false;
-
-  if(sleep != lastSleep)
+  if(!stop_locked)
   {
-    lastSleep = sleep;
-  }
+    int nowMinutes =
+        timeinfo.tm_hour * 60 +
+        timeinfo.tm_min;
 
-  // ---------------- FSM TRANSITION ----------------
-  if(sleep)
-  {
-    if(current != &STATE_STOP)
+    int startMinutes =
+        sleep_start_hour * 60 +
+        sleep_start_minute;
+
+    int endMinutes =
+        sleep_end_hour * 60 +
+        sleep_end_minute;
+  
+    bool sleep = isSleepTime();
+
+    // ---------------- STATE CHANGE TRACKING ----------------
+    static bool lastSleep = false;
+
+    if(sleep != lastSleep)
     {
-      web_log("FSM -> STOP (sleep active)");
-      transitionTo(&STATE_STOP);
+      lastSleep = sleep;
     }
-  }
-  else
-  {
-    if(current == &STATE_STOP && !error)
+
+    // ---------------- FSM TRANSITION ----------------
+    if(sleep)
     {
-      web_log("FSM -> IDLE (sleep ended)");
-      transitionTo(&STATE_IDLE);
+      if(current != &STATE_STOP)
+      {
+        web_log("FSM -> STOP (SLEEP)");
+        transitionTo(&STATE_STOP);
+      }
+    }
+    else
+    {
+      if(current == &STATE_STOP && !error)
+      {
+        web_log("FSM -> IDLE (WAKE)");
+        transitionTo(&STATE_IDLE);
+      }
     }
   }
 }
@@ -291,14 +328,16 @@ void InitState::enter(fsm_t &fsm) {
     s.addTask(led2_task, toggleLed2, led2_timeout, disableLed2);
     s.addTask(measure_process_task, sensorProcess, measure_process_timeout );
     s.addTask(measure_read_task, sensorRead, measure_read_timeout );
-    s.addTask(t1_idle_task,       [&fsm]() {fsm.setDone();}, getCycleTime()       );
+    s.addTask(t1_idle_task,       [&fsm]() {fsm.setDone();}, getCycleTime() );
     s.addTask(t21_watering_task,  [&fsm]() {STATE_WATERING_PUMP.done = true; }, getWateringTimeout() );
     s.addTask(t22_watering_delay, [&fsm]() {STATE_WATERING_WAIT.done = true; }, Time::sec(10) );
     s.addTask(t3_measure_task,    [&fsm]() {fsm.setDone();}, t3_measure_timeout   );
     s.addTask(t45_fertilize_task, []() { STATE_REG1_FERT_A.done = true; STATE_REG3_FERT_B.done = true;}, getFertilizeTimeout());
     s.addTask(t46_wait_task,      []() { STATE_REG2_WAIT.done = true; }, t46_wait_timeout );
     s.addTask(t67_ph_task,        []() { STATE_REG_PH.done = true; STATE_REG_PH.done = true;}, getPhTimeout());
-    s.addTask(t9_flush_task,      [&fsm]() {fsm.setDone();}, getFlushTimeout()    );
+    s.addTask(t8_flush_task,      []() { STATE_FLUSH_PUMP.done = true; }, getFlushTimeout() );
+    s.addTask(t9_flush_delay_task,[]() { STATE_FLUSH_WAIT.done = true; }, getFlushDelayTimeout() );
+    s.addTask(t10_reverse_task,   []() { STATE_FLUSH_REVERSE.done = true; }, getReverseTimeout() );
     s.addTask(second_task,        [&fsm]() {fsm.event1sec();}, Time::sec(1)       );
     s.startTask(second_task);
 }
@@ -333,6 +372,12 @@ void IdleState::enter(fsm_t &fsm) {
   auto &s = fsm.scheduler();
   s.setInterval(t1_idle_task, getCycleTime());
   s.startTask(t1_idle_task);
+
+  setPump(pumps_t::MAIN_PUMP, pump_dir::STOP);
+  setPump(pumps_t::FERTILIZER_A, pump_dir::STOP);
+  setPump(pumps_t::FERTILIZER_B, pump_dir::STOP);
+  setPump(pumps_t::PH_PLUS, pump_dir::STOP);
+  setPump(pumps_t::PH_MINUS, pump_dir::STOP);
 }
 
 void IdleState::exit(fsm_t &fsm) {
@@ -342,6 +387,7 @@ void IdleState::exit(fsm_t &fsm) {
 void IdleState::update(fsm_t &fsm) {
   auto &s = fsm.scheduler();
   if (fsm.stop) {
+    setStopLock(true);
     fsm.transitionTo(&STATE_STOP);
   }
   if(done) {
@@ -454,6 +500,7 @@ void MeasureState::enter(fsm_t &fsm)
   s.startTask(measure_process_task);
   s.startTask(measure_read_task);
   s.startTask(t3_measure_task);
+  active_history = true;
 }
 
 void MeasureState::exit(fsm_t &fsm) {
@@ -462,11 +509,13 @@ void MeasureState::exit(fsm_t &fsm) {
   s.stopTask(measure_process_task);
   s.stopTask(measure_read_task);
   s.stopTask(t3_measure_task);
+  active_history = false;
 }
 
 void MeasureState::update(fsm_t &fsm) {
   auto &s = fsm.scheduler();
   if (fsm.stop) {
+    setStopLock(true);
     fsm.transitionTo(&STATE_STOP);
   }
   if (done)
@@ -538,9 +587,10 @@ void RegulateState::update(fsm_t &fsm)
 void Regulate1_FertilizerAState::enter(fsm_t &fsm)
 {
     auto &s = fsm.scheduler();
-
+    
     s.setInterval(t45_fertilize_task, getFertilizeTimeout());
     s.startTask(t45_fertilize_task);
+    added_fertilizer = true;
 
     setPump(pumps_t::FERTILIZER_A, pump_dir::PUMP);
 }
@@ -659,9 +709,15 @@ void RegulatePhState::enter(fsm_t &fsm)
     s.startTask(t67_ph_task);
 
     if (mode == PhMode::PLUS)
+    {
+        added_ph_plus = true; 
         setPump(pumps_t::PH_PLUS, pump_dir::PUMP);
+    }
     else
+    {
+        added_ph_minus = true;
         setPump(pumps_t::PH_MINUS, pump_dir::PUMP);
+    }
 }
 
 void RegulatePhState::exit(fsm_t &fsm)
@@ -688,75 +744,190 @@ void RegulatePhState::update(fsm_t &fsm)
 
 // ---------- FLUSH ----------
 
-void FlushState::enter(fsm_t &fsm) 
+void FlushState::enter(fsm_t &fsm)
 {
-  setPump(pumps_t::MAIN_PUMP, pump_dir::PUMP);
-  auto &s = fsm.scheduler();
-  s.setInterval(t9_flush_task, getFlushTimeout());
-  s.startTask(t9_flush_task);
-  s.startTask(led1_task);
+    subFsm.begin(&STATE_FLUSH_PUMP);
 }
 
-void FlushState::exit(fsm_t &fsm) {
-  setPump(pumps_t::MAIN_PUMP, pump_dir::STOP);
-  auto &s = fsm.scheduler();
-  s.stopTask(t9_flush_task);
-  s.stopTask(led1_task);
+void FlushState::exit(fsm_t &fsm)
+{
+    if (subFsm.current)
+    {
+        subFsm.current->exit(subFsm);
+    }
 }
 
-void FlushState::update(fsm_t &fsm) {
-  auto &s = fsm.scheduler();
-  if (fsm.stop) {
-    fsm.transitionTo(&STATE_STOP);
-  }
-  if (done)
-  {
-    fsm.transitionTo(&STATE_IDLE);
-  }
-  if (fsm.scheduler().nextSecond())
-  {
-    remaining_seconds = s.getRemainingTime(t9_flush_task);
-  }
+void FlushState::update(fsm_t &fsm)
+{
+    CompositeState::update(fsm);
+
+    if (done)
+    {
+        fsm.transitionTo(&STATE_IDLE);
+    }
+}
+
+void FlushPumpState::enter(fsm_t &fsm)
+{
+    auto &s = fsm.scheduler();
+
+    setPump(pumps_t::MAIN_PUMP, pump_dir::PUMP);
+
+    s.setInterval(t8_flush_task, getFlushTimeout());
+    s.startTask(t8_flush_task);
+
+    s.startTask(led1_task);
+}
+
+void FlushPumpState::exit(fsm_t &fsm)
+{
+    auto &s = fsm.scheduler();
+
+    setPump(pumps_t::MAIN_PUMP, pump_dir::STOP);
+
+    s.stopTask(t8_flush_task);
+    s.stopTask(led1_task);
+}
+
+void FlushPumpState::update(fsm_t &fsm)
+{
+    auto &s = fsm.scheduler();
+
+    if (done)
+    {
+        fsm.transitionTo(&STATE_FLUSH_WAIT);
+    }
+
+    if (fsm.scheduler().nextSecond())
+    {
+        remaining_seconds =
+            s.getRemainingTime(t8_flush_task);
+    }
+}
+
+void FlushWaitState::enter(fsm_t &fsm)
+{
+    auto &s = fsm.scheduler();
+
+    s.setInterval(
+        t9_flush_delay_task,
+        getFlushDelayTimeout());
+
+    s.startTask(t9_flush_delay_task);
+}
+
+void FlushWaitState::exit(fsm_t &fsm)
+{
+    auto &s = fsm.scheduler();
+
+    s.stopTask(t9_flush_delay_task);
+}
+
+void FlushWaitState::update(fsm_t &fsm)
+{
+    auto &s = fsm.scheduler();
+
+    if (done)
+    {
+        fsm.transitionTo(&STATE_FLUSH_REVERSE);
+    }
+
+    if (fsm.scheduler().nextSecond())
+    {
+        remaining_seconds =
+            s.getRemainingTime(t9_flush_delay_task);
+    }
+}
+
+void FlushReverseState::enter(fsm_t &fsm)
+{
+    auto &s = fsm.scheduler();
+
+    s.setInterval(
+        t10_reverse_task,
+        getReverseTimeout());
+
+    s.startTask(t10_reverse_task);
+
+    if(added_fertilizer)
+    {
+        setPump(pumps_t::FERTILIZER_A, pump_dir::REVERSE);
+        setPump(pumps_t::FERTILIZER_B, pump_dir::REVERSE);
+    }
+    if(added_ph_minus)
+    {
+        setPump(pumps_t::PH_MINUS, pump_dir::REVERSE);
+    }
+    if(added_ph_plus)
+    {
+        setPump(pumps_t::PH_PLUS, pump_dir::REVERSE);
+    }
+}
+
+void FlushReverseState::exit(fsm_t &fsm)
+{
+    auto &s = fsm.scheduler();
+
+    added_fertilizer = false;
+    added_ph_minus = false;
+    added_ph_plus = false;
+
+    setPump(pumps_t::FERTILIZER_A, pump_dir::STOP);
+    setPump(pumps_t::FERTILIZER_B, pump_dir::STOP);
+    setPump(pumps_t::PH_PLUS, pump_dir::STOP);
+    setPump(pumps_t::PH_MINUS, pump_dir::STOP);
+
+    s.stopTask(t10_reverse_task);
+}
+
+void FlushReverseState::update(fsm_t &fsm)
+{
+    auto &s = fsm.scheduler();
+
+    if (done)
+    {
+        fsm.current = nullptr;
+        return;
+    }
+
+    if (fsm.scheduler().nextSecond())
+    {
+        remaining_seconds =
+            s.getRemainingTime(t10_reverse_task);
+    }
 }
 
 
 // ---------- CALIBRATE EC ----------
 
-void CalibrateEcState::enter(fsm_t &fsm) {
+void CalibrateState::enter(fsm_t &fsm) 
+{
   auto &s = fsm.scheduler();
+  s.startTask(led2_task);
+  s.startTask(t3_measure_task);
 }
 
-void CalibrateEcState::exit(fsm_t &fsm) {
+void CalibrateState::exit(fsm_t &fsm) {
   auto &s = fsm.scheduler();
+  setActiveCalibration(point_t::COUNT);
+  s.stopTask(led2_task);
+  s.stopTask(t3_measure_task);
 }
 
-void CalibrateEcState::update(fsm_t &fsm) {
+void CalibrateState::update(fsm_t &fsm) {
+  auto &s = fsm.scheduler();
   if (fsm.stop) {
+    setStopLock(true);
     fsm.transitionTo(&STATE_STOP);
   }
   if (done)
   {
-    fsm.transitionTo(&STATE_IDLE);
+      applyCalibration();
+      fsm.transitionTo(&STATE_STOP);
   }
-}
-
-// ---------- CALIBRATE PH ----------
-
-void CalibratePhState::enter(fsm_t &fsm) {
-  auto &s = fsm.scheduler();
-}
-
-void CalibratePhState::exit(fsm_t &fsm) {
-  auto &s = fsm.scheduler();
-}
-
-void CalibratePhState::update(fsm_t &fsm) {
-  if (fsm.stop) {
-    fsm.transitionTo(&STATE_STOP);
-  }
-  if (done)
+  if (fsm.scheduler().nextSecond())
   {
-    fsm.transitionTo(&STATE_IDLE);
+    remaining_seconds = s.getRemainingTime(t3_measure_task);
   }
 }
 
@@ -771,11 +942,11 @@ void setPump(pumps_t pump, pump_dir dir)
 
             if(dir == pump_dir::STOP)
             {
-                pwmMainPump.set(false);
+                gpioMainPump.set(false);
             }
             else
             {
-                pwmMainPump.set(true);
+                gpioMainPump.set(true);
             }
             break;
 

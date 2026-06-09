@@ -6,15 +6,32 @@
 
 // ===================== GLOBAL STATE =====================
 extern bool _read_sensors;
+extern bool active_history;
 
 extern float ecTempMeasure;
 extern float phTempMeasure;
 extern float ecMeasure;
 extern float phMeasure;
+extern float vEcMeasure;
+extern float vPhMeasure;
+extern float meanTemp;
 
 extern MovingMean ecFilter;
 extern MovingMean phFilter;
+extern MovingMean ecTempFilter;
+extern MovingMean phTempFilter;
+extern MovingMean ecVoltFilter;
+extern MovingMean phVoltFilter;
 
+
+enum class point_t : uint8_t
+{
+    PH1,
+    PH2,
+    EC1,
+    EC2,
+    COUNT
+};
 
 // ===================== SENSOR API =====================
 float readVoltage(const pin_t& pin);
@@ -31,8 +48,11 @@ float linearCalibrate(
 float readEC(const pin_t& pin);
 float readPH(const pin_t& pin);
 
-void setPhCalibration(int index, float ph_value);
-void setEcCalibration(int index, float ec_value);
+void logCalPoint(const String& label, const cal_point_t& p);
 
+extern void setActiveCalibration(point_t point);
+extern void applyCalibration();
+
+extern void tempProcess();
 extern void sensorProcess();
 extern void sensorRead();

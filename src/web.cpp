@@ -18,19 +18,25 @@ String ssid;
 String password;
 
 
-
 // ---------------- COMMAND BRIDGE ----------------
-volatile system_cmd_t system_cmd = CMD_NONE;
+portMUX_TYPE cmdMux = portMUX_INITIALIZER_UNLOCKED;
+system_cmd_t system_cmd = CMD_NONE;
 
-// ---------------- DATA ----------------
-float waterTemp;
+void setCommand(system_cmd_t cmd, const String& name)
+{
+  portENTER_CRITICAL(&cmdMux);
+  system_cmd = cmd;
+  portEXIT_CRITICAL(&cmdMux);
 
-std::array<bool, 5> pumps = {
-  false, // MAIN_PUMP
-  false, // PH_PLUS
-  false, // PH_MINUS
-  false, // FERTILIZER_A
-  false  // FERTILIZER_B
+  web_log(String("CMD ") + name);
+}
+
+std::array<pump_dir, 5> pumps = {
+  pump_dir::STOP, // MAIN_PUMP
+  pump_dir::STOP, // PH_PLUS
+  pump_dir::STOP, // PH_MINUS
+  pump_dir::STOP, // FERTILIZER_A
+  pump_dir::STOP  // FERTILIZER_B
 };
 
 extern fsm_t fsm;
@@ -79,7 +85,7 @@ void web_log(const String &msg)
 
 void web_pumps(pumps_t pump, pump_dir dir)
 {
-  pumps[static_cast<size_t>(pump)] = (dir != pump_dir::STOP);
+  pumps[static_cast<size_t>(pump)] = dir;
 
   String pumpName;
 
@@ -107,52 +113,29 @@ void web_pumps(pumps_t pump, pump_dir dir)
 // ==================================================
 // DATA BUFFER
 // ==================================================
-void web_add_data(float ec_v, float ph_v, float temp)
+void web_add_data_hist(float ec_v, float ph_v, float temp)
 {
-  // ---------------- SAFETY CHECKS ----------------
-  bool bad_ec   = isnan(ec_v)   || isinf(ec_v);
-  bool bad_ph   = isnan(ph_v)   || isinf(ph_v);
-  bool bad_temp = isnan(temp)   || isinf(temp);
-
-  if (bad_ec || bad_ph || bad_temp)
-  {
-    web_log(String("SENSOR WARN: invalid data")
-      + "\nec=" + String(ec_v)
-      + "\nph=" + String(ph_v)
-      + "\ntemp=" + String(temp)
-      + "\nidx=" + String(hist_index));
-
-    // optional: clamp to safe defaults instead of storing NaN
-    if (bad_ec) ec_v = 0.0f;
-    if (bad_ph) ph_v = 0.0f;
-    if (bad_temp) temp = -273.15f;
-  }
-
-  // ---------------- STORE HISTORY ----------------
-  if (hist_index >= MAX_POINTS)
-  {
-    web_log("HISTORY OVERFLOW (forced reset index)");
-    hist_index = 0;
-    hist_full = true;
-    saveHistory();
-  }
-
   ec_hist[hist_index] = ec_v;
   ph_hist[hist_index] = ph_v;
   temp_hist[hist_index] = temp;
 
-  waterTemp = temp;
+  hist_index++;
 
-  // ---------------- DEBUG TRACE (lightweight) ----------------
-  if (hist_index % 10 == 0)
+  if (hist_index >= MAX_POINTS)
   {
-    web_log(String("DATA SAMPLE idx=") + hist_index +
-            " ec=" + String(ec_v, 2) +
-            " ph=" + String(ph_v, 2) +
-            " t=" + String(temp, 2));
+    hist_index = 0;
+    hist_full = true;
+
+    saveHistory();
   }
 
-  hist_index++;
+  if (hist_index % 10 == 0)
+  {
+    // web_log(String("DATA SAMPLE idx=") + hist_index +
+    //         " ec=" + String(ec_v, 2) +
+    //         " ph=" + String(ph_v, 2) +
+    //         " t=" + String(temp, 2));
+  }
 }
 
 // ==================================================
@@ -172,7 +155,7 @@ void saveHistory()
   prefs.end();
 
   web_log(
-    "History loaded\n\tpoints=" + String(MAX_POINTS) +
+    "History saved\n\tpoints=" + String(MAX_POINTS) +
     "\n\tec=" + String(ec_hist[0], 2) +
     "\n\tph=" + String(ph_hist[0], 2) +
     "\n\ttemp=" + String(temp_hist[0], 2)
@@ -215,21 +198,12 @@ void loadHistory()
     hist_index = 0;
 
     web_log(
-      "History loaded\n\tpoints=" + String(MAX_POINTS) +
+      "Load History\n\tpoints=" + String(MAX_POINTS) +
       "\n\tec=" + String(ec_hist[0], 2) +
       "\n\tph=" + String(ph_hist[0], 2) +
       "\n\ttemp=" + String(temp_hist[0], 2)
     );
   }
-}
-
-// ==================================================
-// COMMAND HELPERS
-// ==================================================
-void setCommand(system_cmd_t cmd, const String& name)
-{
-  system_cmd = cmd;
-  web_log(String("CMD ") + name);
 }
 
 // ==================================================
@@ -261,32 +235,6 @@ button { padding:10px; margin:5px; }
   align-items: center;
   justify-content: center;
   text-align: center;
-}
-
-.mainStatus {
-  font-size: 32px;
-  font-weight: bold;
-  text-align: center;
-  margin: 8px 0;
-}
-
-.timerRow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 2px 0;
-  gap: 4px;
-}
-
-.section {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.timerLabel {
-  width: 80px;
-  font-size: 12px;
 }
 
 #chartEC, #chartPH, #chartTEMP {
@@ -367,17 +315,14 @@ button { padding:10px; margin:5px; }
 }
 
 .stateBtn {
-  width: 144px;
-  height: 75px;
+  width: 120px;
+  height: 55px;
   margin: 5px;
-
   display: flex;
   align-items: center;
   justify-content: center;
-
   text-align: center;
-
-  font-size: 16px;
+  font-size: 14px;
   font-weight: bold;
   border-radius: 8px;
 }
@@ -419,9 +364,14 @@ button { padding:10px; margin:5px; }
   box-shadow: inset 0 0 4px rgba(0,0,0,0.4);
 }
 
-.lamp.on {
+.lamp.pump {
   background: #4caf50;
   box-shadow: 0 0 10px #4caf50;
+}
+
+.lamp.reverse {
+  background: #f44336;
+  box-shadow: 0 0 10px #f44336;
 }
 
 .lampWrap {
@@ -441,19 +391,95 @@ button { padding:10px; margin:5px; }
   margin-bottom: 6px;
 }
 
-.timerValue {
-  width: 45px;
-  height: 22px;
-  font-size: 13px;
-}
-
 .calibGrid {
   width: 100%;
   max-width: 420px;
 }
 
-.calibGrid .timerRow {
+.timerRow.compact {
+  display: grid;
+  grid-template-columns: 70px 60px 70px 40px;
+  gap: 4px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.timerRow.compact .timerLabel {
+  font-size: 12px;
+}
+
+.timerRow.compact .timerValue {
+  width: 60px;
+  height: 28px;
+  font-size: 12px;
+}
+
+.timerRow.compact .timerUnit {
+  font-size: 11px;
+}
+
+.timerRow.compact .calibBtn {
+  height: 20px;
+  font-size: 10px;
+  padding: 0 5px;
+  min-width: 70px;
+}
+
+.timerRow {
+  display: grid;
+  grid-template-columns: 140px 120px 60px;
+  align-items: center;
   justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.timerLabel {
+  text-align: right;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.timerValue {
+  width: 60px;
+  height: 30px;
+  font-size: 13px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.timerUnit {
+  text-align: left;
+  font-size: 12px;
+  font-weight: bold;
+  box-sizing: border-box;
+  opacity: 0.6;
+}
+
+/* ================= PARAM TAB ONLY ================= */
+
+.paramRow {
+  display: grid;
+  grid-template-columns: 80px 60px 40px;
+  gap: 2px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.paramRow .timerLabel {
+  font-size: 12px;
+  text-align: right;
+}
+
+.paramRow .timerValue {
+  width: 54px;
+  height: 26px;
+  font-size: 12px;
+}
+
+.paramRow .timerUnit {
+  font-size: 11px;
+  opacity: 0.7;
 }
 
 .graphGrid {
@@ -530,6 +556,15 @@ button { padding:10px; margin:5px; }
 
   <div class="topRow1">
     <div class="title">HydroTower</div>
+
+    <div style="flex:1; display:flex; justify-content:center; gap:12px; align-items:center;">
+      <div id="stateControl" style="font-weight:bold; font-size:16px;">---</div>
+      <div style="font-weight:bold;">
+        <span id="timerControl"></span>
+        <span id="timerUnit">s</span>
+      </div>
+    </div>
+
     <div id="time">--</div>
   </div>
 
@@ -555,12 +590,6 @@ button { padding:10px; margin:5px; }
 <div id="main" class="tab" style="display:block;">
 
   <div class="dashboard">
-
-    <div id="stateControl" class="mainStatus">---</div>
-
-    <div class="mainStatus">
-      <span id="timerControl">0</span> s
-    </div>
 
     <div class="pumpLamps">
 
@@ -636,255 +665,386 @@ button { padding:10px; margin:5px; }
 
 <div id="param" class="tab">
 
-  <div class="section">
+    <div style="
+      display:flex;
+      justify-content:center;
+      align-items:flex-start;
+      gap:2px;
+      flex-wrap:nowrap;
+    ">
 
-    <div class="timerRow">
-      <div class="timerLabel">EC Target</div>      
-      <input id="ecReg"
-            class="timerValue"
-            type="number"
-            step="0.01">
-      <span>-</span>
-      <input id="ecTol"
-            class="timerValue"
-            type="number"
-            step="0.01">
-      <span>mS/cm</span>
-    </div>
+    <div style="
+      width:fit-content;
+      max-width:100%;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:10px;
+    ">
 
-    <div class="timerRow">
-      <div class="timerLabel">PH Target</div>
-      <input id="phReg"
-            class="timerValue"
-            type="number"
-            step="0.01">
-      <span>+/-</span>
-      <input id="phTol"
-            class="timerValue"
-            type="number"
-            step="0.01">
-      <span>pH</span>
-    </div>
+      <!-- SAVE BUTTON -->
+      <button
+        onclick="save()"
+        style="
+          width:260px;
+          height:40px;
+          font-size:14px;
+          background:#d9534f;
+          color:white;
+          border:none;
+          border-radius:6px;
+        ">
+        Save
+      </button>
 
-    <div class="timerRow">
-      <div class="timerLabel">Cycle</div>
-      <input id="idle" class="timerValue" type="number" min="0">
-      <span>min</span>
-    </div>
+      <!-- ===== COMPACT 2 COLUMN WRAP ===== -->
+      <div style="
+        display:flex;
+        justify-content:center;
+        align-items:flex-start;
+        gap:10px;
+        flex-wrap:nowrap;
+      ">
 
-    <div class="timerRow">
-      <div class="timerLabel">Water</div>
-      <input id="water" class="timerValue" type="number" min="0">
-      <span>min</span>
-    </div>
+        <!-- LEFT COLUMN -->
+        <div style="
+          display:flex;
+          flex-direction:column;
+          gap:6px;
+        ">
 
-    <div class="timerRow">
-      <div class="timerLabel">Flush</div>
-      <input id="flush" class="timerValue" type="number" min="0">
-      <span>min</span>
-    </div>
+          <div class="paramRow">
+            <div class="timerLabel">EC Tgt</div>
+            <input id="ecReg" class="timerValue" type="number" step="0.01">
+            <div class="timerUnit">mS</div>
+          </div>
 
-    <div class="timerRow">
-      <div class="timerLabel">Fertilize</div>
-      <input id="fertilize" class="timerValue" type="number" min="0">
-      <span>sec</span>
-    </div>
+          <div class="paramRow">
+            <div class="timerLabel">EC Tol</div>
+            <input id="ecTol" class="timerValue" type="number" step="0.01">
+            <div class="timerUnit">±</div>
+          </div>
 
-    <div class="timerRow">
-      <div class="timerLabel">pH Dose</div>
-      <input id="phSeconds" class="timerValue" type="number" min="0">
-      <span>sec</span>
-    </div>
+          <div class="paramRow">
+            <div class="timerLabel">PH Tgt</div>
+            <input id="phReg" class="timerValue" type="number" step="0.01">
+            <div class="timerUnit">pH</div>
+          </div>
 
-    <div class="timerRow">
-      <div class="timerLabel">Sleep</div>
+          <div class="paramRow">
+            <div class="timerLabel">PH Tol</div>
+            <input id="phTol" class="timerValue" type="number" step="0.01">
+            <div class="timerUnit">±</div>
+          </div>
 
-      <input id="sleepStartHour"
-            class="timerValue"
-            type="number"
-            min="0"
-            max="23"
-            placeholder="HH">
+        </div>
 
-      <span>:</span>
+        <!-- RIGHT COLUMN -->
+        <div style="
+          display:flex;
+          flex-direction:column;
+          gap:6px;
+        ">
 
-      <input id="sleepStartMinute"
-            class="timerValue"
-            type="number"
-            min="0"
-            max="59"
-            placeholder="MM">
-    </div>
+          <div class="paramRow">
+            <div class="timerLabel">Cycle</div>
+            <input id="idle" class="timerValue" type="number">
+            <div class="timerUnit">min</div>
+          </div>
 
-    <div class="timerRow">
-      <div class="timerLabel">Wake</div>
+          <div class="paramRow">
+            <div class="timerLabel">Water</div>
+            <input id="water" class="timerValue" type="number">
+            <div class="timerUnit">min</div>
+          </div>
 
-      <input id="sleepEndHour"
-            class="timerValue"
-            type="number"
-            min="0"
-            max="23"
-            placeholder="HH">
+          <div class="paramRow">
+            <div class="timerLabel">Flush</div>
+            <input id="flush" class="timerValue" type="number">
+            <div class="timerUnit">min</div>
+          </div>
 
-      <span>:</span>
+          <div class="paramRow">
+            <div class="timerLabel">Fert</div>
+            <input id="fertilize" class="timerValue" type="number">
+            <div class="timerUnit">sec</div>
+          </div>
 
-      <input id="sleepEndMinute"
-            class="timerValue"
-            type="number"
-            min="0"
-            max="59"
-            placeholder="MM">
-    </div>
+          <div class="paramRow">
+            <div class="timerLabel">pH D</div>
+            <input id="phSeconds" class="timerValue" type="number">
+            <div class="timerUnit">sec</div>
+          </div>
 
-    <button class="stateBtn" onclick="save()">Save</button>
+        </div>
 
-  </div>
+      </div>
 
-</div>
+      <!-- ================= SLEEP / WAKE INLINE ================= -->
+      <div style="
+        margin-top:25px;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        gap:10px;
+      ">
 
+        <!-- SLEEP -->
+        <div style="
+          display:flex;
+          align-items:center;
+          gap:10px;
+        ">
+          <div class="timerLabel">Sleep</div>
+
+          <div style="display:flex; align-items:center; gap:4px;">
+            <input id="sleepStartHour"
+                  type="number"
+                  min="0" max="23"
+                  style="width:45px; height:28px; text-align:center;">
+            <span>:</span>
+            <input id="sleepStartMinute"
+                  type="number"
+                  min="0" max="59"
+                  style="width:45px; height:28px; text-align:center;">
+          </div>
+
+          <div class="timerUnit">START</div>
+        </div>
+
+        <!-- WAKE -->
+        <div style="
+          display:flex;
+          align-items:center;
+          gap:10px;
+        ">
+          <div class="timerLabel">Wake</div>
+
+          <div style="display:flex; align-items:center; gap:4px;">
+            <input id="sleepEndHour"
+                  type="number"
+                  min="0" max="23"
+                  style="width:45px; height:28px; text-align:center;">
+            <span>:</span>
+            <input id="sleepEndMinute"
+                  type="number"
+                  min="0" max="59"
+                  style="width:45px; height:28px; text-align:center;">
+          </div>
+
+          <div class="timerUnit">END</div>
+        </div>
+
+      </div>
+
+    </div> <!-- inner container -->
+
+  </div> <!-- centered wrapper -->
+
+</div> <!-- PARAM TAB END -->
+
+
+<!-- ================= CALIB TAB ================= -->
 
 <div id="calib" class="tab">
 
-  <div class="dashboard">
+  <div style="
+    width:100%;
+    display:flex;
+    justify-content:center;
+    padding:6px;
+    box-sizing:border-box;
+  ">
 
-    <!-- ================= LOCK BUTTON ================= -->
+    <div style="
+      width:fit-content;
+      max-width:100%;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:10px;
+    ">
 
-    <div style="width:100%; max-width:500px; margin-bottom:20px;">
-
+      <!-- ================= LOCK BUTTON ================= -->
       <button
         class="stateBtn"
         id="calibLockBtn"
         onclick="toggleCalibLock()"
         style="
-          width:100%;
-          height:45px;
-          font-size:16px;
+          width:260px;
+          height:40px;
+          font-size:14px;
           background:#d9534f;
           color:white;
+          border:none;
+          border-radius:6px;
         ">
       </button>
 
+      <!-- ================= LIVE SENSOR VALUES ================= -->
+      <div style="
+        font-size:13px;
+        font-weight:bold;
+        text-align:center;
+        line-height:1.6;
+        background:#eef2f3;
+        padding:8px;
+        border-radius:8px;
+        width:260px;
+      ">
+
+        <div>
+          EC: <span id="ecVoltageLive">0.000</span> V /
+          <span id="ecTempMeasure">0.0</span> °C
+        </div>
+
+        <div>
+          PH: <span id="phVoltageLive">0.000</span> V /
+          <span id="phTempMeasure">0.0</span> °C
+        </div>
+
+      </div>
+
+      <!-- ================= MINI LIVE GRAPHS ================= -->
+
+      <div style="
+        width:260px;
+        display:flex;
+        flex-direction:column;
+        gap:4px;
+      ">
+
+        <div style="height:55px;">
+          <canvas id="chartCalEC"></canvas>
+        </div>
+
+        <div style="height:55px;">
+          <canvas id="chartCalPH"></canvas>
+        </div>
+
+        <div style="height:55px;">
+          <canvas id="chartCalTEMP"></canvas>
+        </div>
+
+      </div>
+
+
+      <!-- ================= CALIB ROWS ================= -->
+      <div style="
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+      ">
+
+      <div class="timerRow compact">
+
+        <button id="calib_ec_p1"
+                class="calibBtn"
+                onclick="setState('/calibrate_ec_p1')">
+          EC1
+        </button>
+
+        <div style="font-size:11px; line-height:1.2; margin-left:6px;">
+          <div>
+            <span id="cal_ec_p1_v">--</span>
+            <span id="cal_ec_p1_val">--</span>
+            <span id="cal_ec_p1_temp">--</span>
+          </div>
+        </div>
+
+        <input id="ecCal1Value"
+              class="timerValue"
+              type="number"
+              step="0.01"
+              placeholder="EC">
+
+        <div class="timerUnit">mS/cm</div>
+
+      </div>
+
+      <div class="timerRow compact">
+
+        <button id="calib_ec_p2"
+                class="calibBtn"
+                onclick="setState('/calibrate_ec_p2')">
+          EC2
+        </button>
+
+        <div style="font-size:11px; line-height:1.2; margin-left:6px;">
+          <div>
+            <span id="cal_ec_p2_v">--</span>
+            <span id="cal_ec_p2_val">--</span>
+            <span id="cal_ec_p2_temp">--</span>
+          </div>
+        </div>
+
+        <input id="ecCal2Value"
+              class="timerValue"
+              type="number"
+              step="0.01"
+              placeholder="EC">
+
+        <div class="timerUnit">mS/cm</div>
+
+      </div>
+
+      <div class="timerRow compact">
+
+        <button id="calib_ph_p1"
+                class="calibBtn"
+                onclick="setState('/calibrate_ph_p1')">
+          PH1
+        </button>
+
+        <div style="font-size:11px; line-height:1.2; margin-left:6px;">
+          <div>
+            <span id="cal_ph_p1_v">--</span>
+            <span id="cal_ph_p1_val">--</span>
+            <span id="cal_ph_p1_temp">--</span>
+          </div>
+        </div>
+
+        <input id="phCal1Value"
+              class="timerValue"
+              type="number"
+              step="0.01"
+              placeholder="pH">
+
+        <div class="timerUnit">pH</div>
+
+      </div>
+
+      <div class="timerRow compact">
+
+        <button id="calib_ph_p2"
+                class="calibBtn"
+                onclick="setState('/calibrate_ph_p2')">
+          PH2
+        </button>
+
+        <div style="font-size:11px; line-height:1.2; margin-left:6px;">
+          <div>
+            <span id="cal_ph_p2_v">--</span>
+            <span id="cal_ph_p2_val">--</span>
+            <span id="cal_ph_p2_temp">--</span>
+          </div>
+        </div>
+
+        <input id="phCal2Value"
+              class="timerValue"
+              type="number"
+              step="0.01"
+              placeholder="pH">
+
+        <div class="timerUnit">pH</div>
+
+      </div>
+
+      </div>
     </div>
-
-    <!-- ================= CALIBRATION ROWS ================= -->
-
-    <div style="
-      width:100%;
-      max-width:500px;
-      display:flex;
-      flex-direction:column;
-      gap:14px;
-    ">
-
-    
-      <!-- LIVE SENSOR VALUES -->
-
-        <div style="
-          margin-top:12px;
-          font-size:15px;
-          font-weight:bold;
-          line-height:1.6;
-        ">
-        <div>EC <span id="ecTempMeasure">0</span> °C / PH: <span id="phTempMeasure">0</span> °C</div>
-      </div>
-
-      <!-- EC P1 -->
-      <div class="calibRow">
-
-        <button
-          id="calib_ec_p1"
-          class="stateBtn calibBtn"
-          onclick="setState('/calibrate_ec_p1')">
-          EC POINT 1
-        </button>
-
-        <div class="calibInputWrap">
-          <input
-            id="ecCal1Value"
-            class="calibInput"
-            type="number"
-            step="0.01"
-            placeholder="EC">
-          <span class="unitLabel">mS/cm</span>
-        </div>
-
-      </div>
-
-
-      <!-- EC P2 -->
-      <div class="calibRow">
-
-        <button
-          id="calib_ec_p2"
-          class="stateBtn calibBtn"
-          onclick="setState('/calibrate_ec_p2')">
-          EC POINT 2
-        </button>
-
-        <div class="calibInputWrap">
-          <input
-            id="ecCal2Value"
-            class="calibInput"
-            type="number"
-            step="0.01"
-            placeholder="EC">
-          <span class="unitLabel">mS/cm</span>
-        </div>
-
-      </div>
-
-
-      <!-- PH P1 -->
-      <div class="calibRow">
-
-        <button
-          id="calib_ph_p1"
-          class="stateBtn calibBtn"
-          onclick="setState('/calibrate_ph_p1')">
-          PH POINT 1
-        </button>
-
-        <div class="calibInputWrap">
-          <input
-            id="phCal1Value"
-            class="calibInput"
-            type="number"
-            step="0.01"
-            placeholder="pH">
-          <span class="unitLabel">pH</span>
-        </div>
-
-      </div>
-
-
-      <!-- PH P2 -->
-      <div class="calibRow">
-
-        <button
-          id="calib_ph_p2"
-          class="stateBtn calibBtn"
-          onclick="setState('/calibrate_ph_p2')">
-          PH POINT 2
-        </button>
-
-        <div class="calibInputWrap">
-          <input
-            id="phCal2Value"
-            class="calibInput"
-            type="number"
-            step="0.01"
-            placeholder="pH">
-          <span class="unitLabel">pH</span>
-        </div>
-
-      </div>
-
-
-    </div>
-
   </div>
-
 </div>
+
 
 
 <!-- ================= MONITOR TAB ================= -->
@@ -915,28 +1075,51 @@ button { padding:10px; margin:5px; }
 
 <script>
 
+let calEcHist = [];
+let calPhHist = [];
+let calTempHist = [];
 
-function showTab(id){
+const CAL_POINTS = 60;
 
-  // hide all tabs
-  document.querySelectorAll('.tab').forEach(e=>{
-    e.style.display='none';
+function showTab(id)
+{
+  // detect previous active tab
+  let previousTab = null;
+
+  document.querySelectorAll('.tab').forEach(e => {
+    if(e.style.display !== 'none')
+      previousTab = e.id;
+
+    e.style.display = 'none';
   });
 
-  // remove active style from all buttons
-  document.querySelectorAll('.tabBtn').forEach(btn=>{
+  // remove active style
+  document.querySelectorAll('.tabBtn').forEach(btn => {
     btn.classList.remove('activeTab');
   });
 
   // show selected tab
-  document.getElementById(id).style.display='block';
+  document.getElementById(id).style.display = 'block';
 
-  // activate matching button
+  // activate button
   document
     .querySelector(`.tabBtn[data-tab="${id}"]`)
     .classList.add('activeTab');
 
-  // refresh charts after graph tab becomes visible
+  // ================= CALIB TAB TASK CONTROL =================
+
+  if(id === 'calib')
+  {
+    fetch('/start_measure');
+  }
+
+  if(previousTab === 'calib' && id !== 'calib')
+  {
+    fetch('/stop_measure');
+  }
+
+  // ================= GRAPH RESIZE =================
+
   if(id === 'graph')
   {
     setTimeout(() => {
@@ -958,7 +1141,7 @@ function setState(route)
   if(route === '/calibrate_ec_p1')
   {
     const v = document.getElementById('ecCal1Value').value;
-    const t = ecTempMeasure;
+    const t = document.getElementById('ecTempMeasure').innerText;
     fetch(`/calibrate_ec_p1?value=${v}&temp=${t}`);
     return;
   }
@@ -966,7 +1149,7 @@ function setState(route)
   if(route === '/calibrate_ec_p2')
   {
     const v = document.getElementById('ecCal2Value').value;
-    const t = ecTempMeasure;
+    const t = document.getElementById('ecTempMeasure').innerText;
     fetch(`/calibrate_ec_p2?value=${v}&temp=${t}`);
     return;
   }
@@ -974,7 +1157,7 @@ function setState(route)
   if(route === '/calibrate_ph_p1')
   {
     const v = document.getElementById('phCal1Value').value;
-    const t = phTempMeasure;
+    const t = document.getElementById('phTempMeasure').innerText;
     fetch(`/calibrate_ph_p1?value=${v}&temp=${t}`);
     return;
   }
@@ -982,7 +1165,7 @@ function setState(route)
   if(route === '/calibrate_ph_p2')
   {
     const v = document.getElementById('phCal2Value').value;
-    const t = phTempMeasure;
+    const t = document.getElementById('phTempMeasure').innerText;
     fetch(`/calibrate_ph_p2?value=${v}&temp=${t}`);
     return;
   }
@@ -1020,6 +1203,72 @@ function toggleCalibLock()
     lockBtn.style.background = "#d9534f";
   }
 }
+
+function createMiniChart(id, label, color, min, max)
+{
+  return new Chart(document.getElementById(id), {
+
+    type: 'line',
+
+    data: {
+      labels: [],
+      datasets: [{
+        label: label,
+        data: [],
+        borderColor: color,
+        borderWidth: 1,
+        pointRadius: 0,
+        tension: 0.3
+      }]
+    },
+
+    options: {
+
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+
+      plugins: {
+        legend: {
+          display: true,
+          labels: {
+            boxWidth: 8,
+            font: {
+              size: 8
+            }
+          }
+        }
+      },
+
+      scales: {
+
+        x: {
+          display: false
+        },
+
+        y: {
+          min: min,
+          max: max,
+
+          ticks: {
+            font: {
+              size: 8
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+const chartCalEC =
+  createMiniChart("chartCalEC", "EC", "#2196F3", 0, 3);
+
+const chartCalPH =
+  createMiniChart("chartCalPH", "PH", "#4CAF50", 4, 9);
+
+const chartCalTEMP =
+  createMiniChart("chartCalTEMP", "TEMP", "#FF9800", 10, 35);
 
 function toggle(url, btnId)
 {
@@ -1427,25 +1676,45 @@ async function update()
     {
       for(let i = 0; i < 5; i++)
       {
-        let lamp = document.getElementById("lamp" + i);
+        const lamp = document.getElementById("lamp" + i);
 
         if(!lamp)
           continue;
 
-        if(d.pumps[i])
-          lamp.classList.add("on");
-        else
-          lamp.classList.remove("on");
+        lamp.classList.remove("pump");
+        lamp.classList.remove("reverse");
+
+        switch(d.pumps[i])
+        {
+          case 1: // PUMP
+            lamp.classList.add("pump");
+            break;
+
+          case 2: // REVERSE
+            lamp.classList.add("reverse");
+            break;
+
+          default: // STOP
+            break;
+        }
       }
     }
 
     // ================= TOP BAR =================
 
-    document.getElementById('time').innerText =
-      d.time || "--";
+    document.getElementById('time').innerText = d.time || "--";
+    document.getElementById('stateControl').innerText = d.state || "---";
 
-    document.getElementById('stateControl').innerText =
-      d.state || "---";
+    const timerEl = document.getElementById('timerControl');
+    const unitEl = document.getElementById('timerUnit');
+
+    if (d.state === "STOP") {
+      timerEl.innerText = "";
+      unitEl.style.display = "none";
+    } else {
+      timerEl.innerText = (d.timer != null ? d.timer : 0);
+      unitEl.style.display = "inline";
+    }
 
     document.getElementById('ecControlValue').innerText =
       (d.ec != null ? d.ec : 0);
@@ -1456,18 +1725,88 @@ async function update()
     document.getElementById('tempControlValue').innerText =
       (d.temp != null ? d.temp : 0);
 
-    document.getElementById('timerControl').innerText =
-      (d.timer != null ? d.timer : 0);
-
-
     // ================= CALIBRATION =================
 
-    document.getElementById('ecTempMeasure').innerText =
-      Number(d.ecTempMeasure || 0).toFixed(1);
+      document.getElementById('ecVoltageLive').innerText =
+        Number(d.vEcMeasure || 0).toFixed(3);
 
-    document.getElementById('phTempMeasure').innerText =
-      Number(d.phTempMeasure || 0).toFixed(1);
+      document.getElementById('phVoltageLive').innerText =
+        Number(d.vPhMeasure || 0).toFixed(3);
 
+      document.getElementById('ecTempMeasure').innerText =
+        Number(d.ecTempMeasure || 0).toFixed(1);
+
+      document.getElementById('phTempMeasure').innerText =
+        Number(d.phTempMeasure || 0).toFixed(1);
+
+      if(d.calib)
+      {
+        document.getElementById('cal_ec_p1_v').innerText =
+          Number(d.calib.ec_p1.voltage).toFixed(3) + " V";
+
+        document.getElementById('cal_ec_p1_val').innerText =
+          Number(d.calib.ec_p1.value).toFixed(2) + " mS/cm";
+
+        document.getElementById('cal_ec_p1_temp').innerText =
+          Number(d.calib.ec_p1.temp).toFixed(1) + " °C";
+
+
+        document.getElementById('cal_ec_p2_v').innerText =
+          Number(d.calib.ec_p2.voltage).toFixed(3) + " V";
+
+        document.getElementById('cal_ec_p2_val').innerText =
+          Number(d.calib.ec_p2.value).toFixed(2) + " mS/cm";
+
+        document.getElementById('cal_ec_p2_temp').innerText =
+          Number(d.calib.ec_p2.temp).toFixed(1) + " °C";
+
+
+        document.getElementById('cal_ph_p1_v').innerText =
+          Number(d.calib.ph_p1.voltage).toFixed(3) + " V";
+
+        document.getElementById('cal_ph_p1_val').innerText =
+          Number(d.calib.ph_p1.value).toFixed(2) + " pH";
+          
+        document.getElementById('cal_ph_p1_temp').innerText =
+          Number(d.calib.ph_p1.temp).toFixed(1) + " °C";
+
+
+        document.getElementById('cal_ph_p2_v').innerText =
+          Number(d.calib.ph_p2.voltage).toFixed(3) + " V";
+
+        document.getElementById('cal_ph_p2_val').innerText =
+          Number(d.calib.ph_p2.value).toFixed(2) + " pH";
+
+        document.getElementById('cal_ph_p2_temp').innerText =
+          Number(d.calib.ph_p2.temp).toFixed(1) + " °C";
+      }
+
+      calEcHist.push(Number(d.ec || 0));
+      calPhHist.push(Number(d.ph || 0));
+      calTempHist.push(Number(d.temp || 0));
+
+      if(calEcHist.length > CAL_POINTS)
+      {
+        calEcHist.shift();
+        calPhHist.shift();
+        calTempHist.shift();
+      }
+
+      const labels =
+        calEcHist.map((_, i) => i);
+
+      chartCalEC.data.labels = labels;
+      chartCalEC.data.datasets[0].data = calEcHist;
+
+      chartCalPH.data.labels = labels;
+      chartCalPH.data.datasets[0].data = calPhHist;
+
+      chartCalTEMP.data.labels = labels;
+      chartCalTEMP.data.datasets[0].data = calTempHist;
+
+      chartCalEC.update('none');
+      chartCalPH.update('none');
+      chartCalTEMP.update('none');
 
     // ================= CHARTS =================
 
@@ -1515,7 +1854,7 @@ async function update()
     setIfNotDirty('water', d.water != null ? d.water : 0);
     setIfNotDirty('flush', d.flush != null ? d.flush : 0);
     setIfNotDirty('fertilize', d.fertilize != null ? d.fertilize : 0);
-    setIfNotDirty('phSeconds', d.phsec != null ? d.phsec : 0);
+    setIfNotDirty('phSeconds', d.phSeconds != null ? d.phSeconds : 0);
 
     setIfNotDirty('sleepStartHour', d.sh != null ? d.sh : 0);
     setIfNotDirty('sleepStartMinute', d.sm != null ? d.sm : 0);
@@ -1527,11 +1866,17 @@ async function update()
     setIfNotDirty('ecTol', d.ecTol != null ? d.ecTol : 0);
     setIfNotDirty('phTol', d.phTol != null ? d.phTol : 0);
 
-    setIfNotDirty('ecCal1Value', d.ecReg != null ? d.ecReg : 0);
-    setIfNotDirty('ecCal2Value', d.ecReg != null ? d.ecReg : 0);
+    const calibMap = {
+      ecCal1Value: d.calib?.ec_p1?.value,
+      ecCal2Value: d.calib?.ec_p2?.value,
+      phCal1Value: d.calib?.ph_p1?.value,
+      phCal2Value: d.calib?.ph_p2?.value,
+    };
 
-    setIfNotDirty('phCal1Value', d.phReg != null ? d.phReg : 0);
-    setIfNotDirty('phCal2Value', d.phReg != null ? d.phReg : 0);
+    for (const id in calibMap)
+    {
+      setIfNotDirty(id, calibMap[id] ?? 0);
+    }
 
   }
   catch(err)
@@ -1554,7 +1899,8 @@ updateLog();
 [
   'idle','water','flush','fertilize','phSeconds',
   'sleepStartHour','sleepStartMinute','sleepEndHour','sleepEndMinute',
-  'ecReg','phReg','ecTol','phTol'
+  'ecReg','phReg','ecTol','phTol',
+  'ecCal1Value','ecCal2Value','phCal1Value','phCal2Value'
 ].forEach(id => {
 
   const el = document.getElementById(id);
@@ -1641,7 +1987,7 @@ void connectWiFi()
   prefs.end();
 
   web_log(
-    "Load\n\tidle=" + String(cycle_time_minutes) +
+    "Load Parameter\n\tidle=" + String(cycle_time_minutes) +
     "\n\twater=" + String(watering_minutes) +
     "\n\tflush=" + String(flush_minutes) +
     "\n\tfertilize=" + String(fertilize_seconds) +
@@ -1703,16 +2049,18 @@ String buildJson()
   json += "\"ph\":" + String(phMeasure, 2) + ",";
   json += "\"ecTol\":" + String(ec_tolerance, 2) + ",";
   json += "\"phTol\":" + String(ph_tolerance, 2) + ",";
-  json += "\"temp\":" + String(waterTemp, 2) + ",";
+  json += "\"temp\":" + String(meanTemp, 2) + ",";
   json += "\"ecTempMeasure\":" + String(ecTempMeasure, 2) + ",";
   json += "\"phTempMeasure\":" + String(phTempMeasure, 2) + ",";
+  json += "\"vEcMeasure\":" + String(vEcMeasure, 3) + ",";
+  json += "\"vPhMeasure\":" + String(vPhMeasure, 3) + ",";
 
   json += "\"time\":\"" + getTimeString() + "\",";
   json += "\"idle\":" + String(cycle_time_minutes) + ",";
   json += "\"water\":" + String(watering_minutes) + ",";
   json += "\"flush\":" + String(flush_minutes) + ",";
   json += "\"fertilize\":" + String(fertilize_seconds) + ",";
-  json += "\"phsec\":" + String(ph_seconds) + ",";
+  json += "\"phSeconds\":" + String(ph_seconds) + ",";
   json += "\"sh\":" + String(sleep_start_hour) + ",";
   json += "\"sm\":" + String(sleep_start_minute) + ",";
   json += "\"eh\":" + String(sleep_end_hour) + ",";
@@ -1720,11 +2068,34 @@ String buildJson()
   json += "\"ecReg\":" + String(ec_regulator, 2) + ",";
   json += "\"phReg\":" + String(ph_regulator, 2) + ",";
 
+  
+  json += "\"calib\":{";
+  json += "\"ec_p1\":{";
+  json += "\"value\":" + String(ec_cal_1.value, 2) + ",";
+  json += "\"temp\":" + String(ec_cal_1.temp, 2) + ",";
+  json += "\"voltage\":" + String(ec_cal_1.voltage, 3) + "},";
+  json += "\"ec_p2\":{";
+  json += "\"value\":" + String(ec_cal_2.value, 2) + ",";
+  json += "\"temp\":" + String(ec_cal_2.temp, 2) + ",";
+  json += "\"voltage\":" + String(ec_cal_2.voltage, 3) + "},";
+  json += "\"ph_p1\":{";
+  json += "\"value\":" + String(ph_cal_1.value, 2) + ",";
+  json += "\"temp\":" + String(ph_cal_1.temp, 2) + ",";
+  json += "\"voltage\":" + String(ph_cal_1.voltage, 3) + "},";
+  json += "\"ph_p2\":{";
+  json += "\"value\":" + String(ph_cal_2.value, 2) + ",";
+  json += "\"temp\":" + String(ph_cal_2.temp, 2) + ",";
+  json += "\"voltage\":" + String(ph_cal_2.voltage, 3) + "}";
+  json += "},";
+
+
   json += "\"pumps\":[";
-  for(int i = 0; i < pumps.size(); i++)
+  for(int i = 0; i < 5; i++)
   {
-    json += pumps[i] ? "1" : "0";
-    if(i < pumps.size() - 1) json += ",";
+      json += String(static_cast<int>(pumps[i]));
+
+      if(i < 4)
+          json += ",";
   }
   json += "],";
 
@@ -1738,9 +2109,8 @@ String buildJson()
 
   for(int i = 0; i < count; i++)
   {
-    int idx = hist_full
-      ? (hist_index + i) % MAX_POINTS
-      : i;
+    int start = hist_full ? hist_index : 0;
+    int idx = (start + i) % MAX_POINTS;
 
     json += "\"" + String(idx) + "\"";
 
@@ -1755,9 +2125,8 @@ String buildJson()
 
   for(int i = 0; i < count; i++)
   {
-    int idx = hist_full
-      ? (hist_index + i) % MAX_POINTS
-      : i;
+    int start = hist_full ? hist_index : 0;
+    int idx = (start + i) % MAX_POINTS;
 
     json += String(ec_hist[idx], 2);
 
@@ -1772,9 +2141,8 @@ String buildJson()
 
   for(int i = 0; i < count; i++)
   {
-    int idx = hist_full
-      ? (hist_index + i) % MAX_POINTS
-      : i;
+    int start = hist_full ? hist_index : 0;
+    int idx = (start + i) % MAX_POINTS;
 
     json += String(ph_hist[idx], 2);
 
@@ -1788,9 +2156,8 @@ String buildJson()
   json += "\"temp_hist\":[";
   for(int i = 0; i < count; i++)
   {
-    int idx = hist_full
-      ? (hist_index + i) % MAX_POINTS
-      : i;
+    int start = hist_full ? hist_index : 0;
+    int idx = (start + i) % MAX_POINTS;
 
     json += String(temp_hist[idx], 2);
 
@@ -1804,6 +2171,143 @@ String buildJson()
   json += "}";
 
   return json;
+}
+
+// ==================================================
+// CALIBRATION SAVE
+// ==================================================
+void saveEcCalibration1()
+{
+  prefs.begin("calibration", false);
+  prefs.putBool("ec_valid_1", ec_cal_1_valid);
+  prefs.putFloat("ec1_value", ec_cal_1.value);
+  prefs.putFloat("ec1_temp", ec_cal_1.temp);
+  prefs.putFloat("ec1_voltage", ec_cal_1.voltage);
+  prefs.end();
+
+  web_log(
+    "EC CAL P1\n\tvalue=" + String(ec_cal_1.value, 2) +
+    "\n\ttemp=" + String(ec_cal_1.temp, 1) +
+    "\n\tvoltage=" + String(ec_cal_1.voltage, 3)
+  );
+}
+
+void saveEcCalibration2()
+{
+  prefs.begin("calibration", false);
+  prefs.putBool("ec_valid_2", ec_cal_2_valid);
+  prefs.putFloat("ec2_value", ec_cal_2.value);
+  prefs.putFloat("ec2_temp", ec_cal_2.temp);
+  prefs.putFloat("ec2_voltage", ec_cal_2.voltage);
+  prefs.end();
+
+  web_log(
+    "EC CAL P2\n\tvalue=" + String(ec_cal_2.value, 2) +
+    "\n\ttemp=" + String(ec_cal_2.temp, 1) +
+    "\n\tvoltage=" + String(ec_cal_2.voltage, 3)
+  );
+}
+
+void savePhCalibration1()
+{
+  prefs.begin("calibration", false);
+  prefs.putBool("ph_valid_1", ph_cal_1_valid);
+  prefs.putFloat("ph1_value", ph_cal_1.value);
+  prefs.putFloat("ph1_temp", ph_cal_1.temp);
+  prefs.putFloat("ph1_voltage", ph_cal_1.voltage);
+  prefs.end();
+
+  web_log(
+    "PH CAL P1\n\tvalue=" + String(ph_cal_1.value, 2) +
+    "\n\ttemp=" + String(ph_cal_1.temp, 1) +
+    "\n\tvoltage=" + String(ph_cal_1.voltage, 3)
+  );
+}
+
+void savePhCalibration2()
+{
+  prefs.begin("calibration", false);
+  prefs.putBool("ph_valid_2", ph_cal_2_valid);
+  prefs.putFloat("ph2_value", ph_cal_2.value);
+  prefs.putFloat("ph2_temp", ph_cal_2.temp);
+  prefs.putFloat("ph2_voltage", ph_cal_2.voltage);
+  prefs.end();
+
+  web_log(
+    "PH CAL P2\n\tvalue=" + String(ph_cal_2.value, 2) +
+    "\n\ttemp=" + String(ph_cal_2.temp, 1) +
+    "\n\tvoltage=" + String(ph_cal_2.voltage, 3)
+  );
+}
+
+
+// ==================================================
+// CALIBRATION LOAD
+// ==================================================
+void loadCalibration()
+{
+  prefs.begin("calibration", true);
+
+  // ---------- EC ----------
+  ec_cal_1_valid = prefs.getBool("ec_valid_1", false);
+  ec_cal_2_valid = prefs.getBool("ec_valid_2", false);
+
+  ec_cal_1.value   = prefs.getFloat("ec1_value", 0);
+  ec_cal_1.temp    = prefs.getFloat("ec1_temp", 25);
+  ec_cal_1.voltage = prefs.getFloat("ec1_voltage", 0);
+
+  ec_cal_2.value   = prefs.getFloat("ec2_value", 0);
+  ec_cal_2.temp    = prefs.getFloat("ec2_temp", 25);
+  ec_cal_2.voltage = prefs.getFloat("ec2_voltage", 0);
+
+  // ---------- PH ----------
+  ph_cal_1_valid = prefs.getBool("ph_valid_1", false);
+  ph_cal_2_valid = prefs.getBool("ph_valid_2", false);
+
+  ph_cal_1.value   = prefs.getFloat("ph1_value", 0);
+  ph_cal_1.temp    = prefs.getFloat("ph1_temp", 25);
+  ph_cal_1.voltage = prefs.getFloat("ph1_voltage", 0);
+
+  ph_cal_2.value   = prefs.getFloat("ph2_value", 0);
+  ph_cal_2.temp    = prefs.getFloat("ph2_temp", 25);
+  ph_cal_2.voltage = prefs.getFloat("ph2_voltage", 0);
+
+  prefs.end();
+
+  // ---------- VALIDATION ----------
+  if(ec_cal_1_valid && ec_cal_2_valid)
+  {
+      web_log(
+        "Load EC calibration\n\tP1=" +
+        String(ec_cal_1.value, 2) +
+        "\n\tP2=" +
+        String(ec_cal_2.value, 2) +
+        "\n\tV1=" +
+        String(ec_cal_1.voltage, 3) +
+        "\n\tV2=" +
+        String(ec_cal_2.voltage, 3)
+      );
+  }
+  else{
+      web_log("EC calibration not found!");
+  }
+
+  if(ph_cal_1_valid && ph_cal_2_valid)
+  {
+      web_log(
+        "Load PH calibration\n\tP1=" +
+        String(ph_cal_1.value, 2) +
+        "\n\tP2=" +
+        String(ph_cal_2.value, 2) +
+        "\n\tV1=" +
+        String(ph_cal_1.voltage, 3) +
+        "\n\tV2=" +
+        String(ph_cal_2.voltage, 3)
+      );
+  }
+  else{
+      web_log("PH calibration not found!");
+  }
 }
 
 
@@ -1830,17 +2334,10 @@ void setupRoutes()
     {
       ec_cal_1.value = req->getParam("value")->value().toFloat();
       ec_cal_1.temp  = req->getParam("temp")->value().toFloat();
-      ec_cal_1.voltage = 0.0f; // OR actual ADC voltage if you later pass it
-
-      ec_cal_valid_1 = true;
-
-      web_log(
-        "EC CAL P1\n\tvalue=" + String(ec_cal_1.value, 2) +
-        "\n\ttemp=" + String(ec_cal_1.temp, 1)
-      );
-
-      req->send(200, "text/plain", "OK");
     }
+    setCommand(CMD_CALIBRATE_EC1, "CALIBRATE EC1");
+    
+    req->send(200, "text/plain", "OK");
   });
 
   server.on("/calibrate_ec_p2", HTTP_GET, [](AsyncWebServerRequest *req)
@@ -1850,23 +2347,10 @@ void setupRoutes()
       ec_cal_2.value = req->getParam("value")->value().toFloat();
       ec_cal_2.temp = req->getParam("temp")->value().toFloat();
 
-      ec_cal_valid_2 = true;
-
-      web_log(
-        "EC CAL P2\n\tvalue=" + String(ec_cal_2.value, 2) +
-        "\n\ttemp=" + String(ec_cal_2.temp, 1)
-      );
-
-      // APPLY CALIBRATION
-      if(ec_cal_valid_1 && ec_cal_valid_2)
-      {
-        setEcCalibration(0, ec_cal_1.value);
-        setEcCalibration(1, ec_cal_2.value);
-        web_log("EC calibration applied");
-      }
-
-      req->send(200, "text/plain", "OK");
     }
+    setCommand(CMD_CALIBRATE_EC2, "CALIBRATE EC2");
+
+    req->send(200, "text/plain", "OK");
   });
 
   server.on("/calibrate_ph_p1", HTTP_GET, [](AsyncWebServerRequest *req)
@@ -1875,16 +2359,11 @@ void setupRoutes()
     {
       ph_cal_1.value = req->getParam("value")->value().toFloat();
       ph_cal_1.temp = req->getParam("temp")->value().toFloat();
-
-      ph_cal_valid_1 = true;
-
-      web_log(
-        "PH CAL P1\n\tvalue=" + String(ph_cal_1.value, 2) +
-        "\n\ttemp=" + String(ph_cal_1.temp, 1)
-      );
-
-      req->send(200, "text/plain", "OK");
     }
+    setCommand(CMD_CALIBRATE_PH1, "CALIBRATE PH1");
+
+    req->send(200, "text/plain", "OK");
+
   });
 
   server.on("/calibrate_ph_p2", HTTP_GET, [](AsyncWebServerRequest *req)
@@ -1893,25 +2372,10 @@ void setupRoutes()
     {
       ph_cal_2.value = req->getParam("value")->value().toFloat();
       ph_cal_2.temp = req->getParam("temp")->value().toFloat();
-
-      ph_cal_valid_2 = true;
-
-      web_log(
-        "PH CAL P2\n\tvalue=" + String(ph_cal_2.value, 2) +
-        "\n\ttemp=" + String(ph_cal_2.temp, 1)
-      );
-
-      // APPLY CALIBRATION
-      if(ph_cal_valid_1 && ph_cal_valid_2)
-      {
-        setPhCalibration(0, ph_cal_1.value);
-        setPhCalibration(1, ph_cal_2.value);
-
-        web_log("PH calibration applied");
-      }
-
-      req->send(200, "text/plain", "OK");
     }
+    setCommand(CMD_CALIBRATE_PH2, "CALIBRATE PH2");
+    
+    req->send(200, "text/plain", "OK");
   });
 
   server.on("/log", HTTP_GET, [](AsyncWebServerRequest *req)
@@ -2031,6 +2495,23 @@ void setupRoutes()
     req->send(200, "text/plain", "Saved");
   });
 
+  server.on("/start_measure", HTTP_GET, [](AsyncWebServerRequest *req)
+  {
+    scheduler.startTask(measure_process_task);
+    scheduler.startTask(measure_read_task);
+    setStopLock(true);
+    fsm.transitionTo(&STATE_STOP);
+    req->send(200, "text/plain", "OK");
+  });
+
+  server.on("/stop_measure", HTTP_GET, [](AsyncWebServerRequest *req)
+  {
+    scheduler.stopTask(measure_process_task);
+    scheduler.stopTask(measure_read_task);
+    setStopLock(false);
+    fsm.transitionTo(&STATE_IDLE);
+    req->send(200, "text/plain", "OK");
+  });
 
   server.on("/idle", HTTP_GET, [](AsyncWebServerRequest *req)
   {
@@ -2067,18 +2548,6 @@ void setupRoutes()
     setCommand(CMD_FLUSH, "FLUSH");
     req->send(200, "text/plain", "OK");
   });
-
-  server.on("/calibrate_ec", HTTP_GET, [](AsyncWebServerRequest *req)
-  {
-    setCommand(CMD_CALIBRATE_EC, "CALIBRATE");
-    req->send(200, "text/plain", "OK");
-  });
-
-  server.on("/calibrate_ph", HTTP_GET, [](AsyncWebServerRequest *req)
-  {
-    setCommand(CMD_CALIBRATE_PH, "CALIBRATE");
-    req->send(200, "text/plain", "OK");
-  });
 }
 
 // ==================================================
@@ -2086,6 +2555,7 @@ void web_init()
 {
   connectWiFi();
   loadHistory();
+  loadCalibration();
   setupRoutes();
   server.begin();
 }

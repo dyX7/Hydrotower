@@ -6,9 +6,14 @@ void web_init();
 void web_loop();
 
 // data logging
-void web_add_data(float ec, float ph, float temp);
+void web_add_data_hist(float ec, float ph, float temp);
 void web_log(const String &msg);
 void web_pumps(pumps_t pump, pump_dir dir);
+
+extern void savePhCalibration1();
+extern void savePhCalibration2();
+extern void saveEcCalibration1();
+extern void saveEcCalibration2();
 
 // shared command from web → main
 enum system_cmd_t {
@@ -21,16 +26,10 @@ enum system_cmd_t {
   CMD_MEASURE,
   CMD_REGULATE,
   CMD_FLUSH,
-  CMD_CALIBRATE_EC,
-  CMD_CALIBRATE_PH
+  CMD_CALIBRATE_EC1,
+  CMD_CALIBRATE_EC2,
+  CMD_CALIBRATE_PH1,
+  CMD_CALIBRATE_PH2
 };
 
-extern volatile system_cmd_t system_cmd;
-
-extern uint8_t img_test[];
-extern const char img_idle[];
-extern const char img_water[];
-extern const char img_measure[];
-extern const char img_regulate[];
-extern const char img_flush[];
-extern const char img_calibrate[];
+extern system_cmd_t system_cmd;
