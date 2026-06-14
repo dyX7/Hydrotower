@@ -5,7 +5,6 @@
 #include <web.hpp>
 
 // ===================== GLOBAL STATE =====================
-extern bool _read_sensors;
 extern bool active_history;
 
 extern float ecTempMeasure;
@@ -20,8 +19,8 @@ extern MovingMean ecFilter;
 extern MovingMean phFilter;
 extern MovingMean ecTempFilter;
 extern MovingMean phTempFilter;
-extern MovingMean ecVoltFilter;
-extern MovingMean phVoltFilter;
+extern MovingMean vEcFilter;
+extern MovingMean vPhFilter;
 
 
 enum class point_t : uint8_t
@@ -55,4 +54,5 @@ extern void applyCalibration();
 
 extern void tempProcess();
 extern void sensorProcess();
-extern void sensorRead();
+
+extern void disableMeasurement();

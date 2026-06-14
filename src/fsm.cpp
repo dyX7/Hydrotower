@@ -35,6 +35,10 @@ bool added_fertilizer{false};
 bool added_ph_plus{false};
 bool added_ph_minus{false};
 
+uint32_t last_fertilize_cycle = 0;
+uint32_t last_ph_plus_cycle = 0;
+uint32_t last_ph_minus_cycle = 0;
+
 bool stop_locked{false};
 void setStopLock(bool lock)
 {
@@ -62,7 +66,6 @@ task_t t45_fertilize_task   { "FERTILIZE" };
 task_t t46_wait_task        { "REG_WAIT" };
 task_t t67_ph_task          { "PH" };
 task_t measure_process_task { "MEAS_PROC" };
-task_t measure_read_task    { "MEAS_READ" };
 task_t second_task          { "SECOND" };
 
 Time led1_timeout{Time::ms(500)};
@@ -116,12 +119,10 @@ inline bool phMinusNeeded()
 Time t2_watering_timeout{getWateringTimeout()};
 Time t8_flush_timeout{getFlushTimeout()};
 Time t9_flush_delay_timeout{getFlushDelayTimeout()};
-Time t3_measure_timeout{Time::sec(3)};
+Time t3_measure_timeout{Time::min(1)};
 Time t45_fertilize_timeout{getFertilizeTimeout()};
 Time t46_wait_timeout{Time::sec(10)};
 Time t67_ph_timeout{getPhTimeout()};
-Time measure_process_timeout{Time::us_(5000)};
-Time measure_read_timeout{Time::us_(5000)};
 
 // ---------------- Instances ----------------
 
@@ -326,8 +327,7 @@ void InitState::enter(fsm_t &fsm) {
     auto &s = fsm.scheduler();
     s.addTask(led1_task, toggleLed1, led1_timeout, disableLed1 );
     s.addTask(led2_task, toggleLed2, led2_timeout, disableLed2);
-    s.addTask(measure_process_task, sensorProcess, measure_process_timeout );
-    s.addTask(measure_read_task, sensorRead, measure_read_timeout );
+    s.addTask(measure_process_task, sensorProcess, Time::us_(2000) );
     s.addTask(t1_idle_task,       [&fsm]() {fsm.setDone();}, getCycleTime() );
     s.addTask(t21_watering_task,  [&fsm]() {STATE_WATERING_PUMP.done = true; }, getWateringTimeout() );
     s.addTask(t22_watering_delay, [&fsm]() {STATE_WATERING_WAIT.done = true; }, Time::sec(10) );
@@ -352,11 +352,7 @@ void StopState::enter(fsm_t &fsm) {
   s.stopTask(t1_idle_task);
 
   remaining_seconds = 0;
-  setPump(pumps_t::MAIN_PUMP, pump_dir::STOP);
-  setPump(pumps_t::FERTILIZER_A, pump_dir::STOP);
-  setPump(pumps_t::FERTILIZER_B, pump_dir::STOP);
-  setPump(pumps_t::PH_MINUS, pump_dir::STOP);
-  setPump(pumps_t::PH_PLUS, pump_dir::STOP);
+  disableAllPumps();
 }
 
 void StopState::exit(fsm_t &fsm) {
@@ -373,11 +369,8 @@ void IdleState::enter(fsm_t &fsm) {
   s.setInterval(t1_idle_task, getCycleTime());
   s.startTask(t1_idle_task);
 
-  setPump(pumps_t::MAIN_PUMP, pump_dir::STOP);
-  setPump(pumps_t::FERTILIZER_A, pump_dir::STOP);
-  setPump(pumps_t::FERTILIZER_B, pump_dir::STOP);
-  setPump(pumps_t::PH_PLUS, pump_dir::STOP);
-  setPump(pumps_t::PH_MINUS, pump_dir::STOP);
+  disableMeasurement();
+  disableAllPumps();
 }
 
 void IdleState::exit(fsm_t &fsm) {
@@ -498,7 +491,6 @@ void MeasureState::enter(fsm_t &fsm)
   auto &s = fsm.scheduler();
   s.startTask(led2_task);
   s.startTask(measure_process_task);
-  s.startTask(measure_read_task);
   s.startTask(t3_measure_task);
   active_history = true;
 }
@@ -507,9 +499,9 @@ void MeasureState::exit(fsm_t &fsm) {
   auto &s = fsm.scheduler();
   s.stopTask(led2_task);
   s.stopTask(measure_process_task);
-  s.stopTask(measure_read_task);
   s.stopTask(t3_measure_task);
   active_history = false;
+  disableMeasurement();
 }
 
 void MeasureState::update(fsm_t &fsm) {
@@ -561,11 +553,7 @@ void RegulateState::enter(fsm_t &fsm)
 
 void RegulateState::exit(fsm_t &fsm)
 {
-    setPump(pumps_t::MAIN_PUMP, pump_dir::STOP);
-    setPump(pumps_t::FERTILIZER_A, pump_dir::STOP);
-    setPump(pumps_t::FERTILIZER_B, pump_dir::STOP);
-    setPump(pumps_t::PH_PLUS, pump_dir::STOP);
-    setPump(pumps_t::PH_MINUS, pump_dir::STOP);
+    disableAllPumps();
 
     if (subFsm.current)
         subFsm.current->exit(subFsm);
@@ -872,10 +860,7 @@ void FlushReverseState::exit(fsm_t &fsm)
     added_ph_minus = false;
     added_ph_plus = false;
 
-    setPump(pumps_t::FERTILIZER_A, pump_dir::STOP);
-    setPump(pumps_t::FERTILIZER_B, pump_dir::STOP);
-    setPump(pumps_t::PH_PLUS, pump_dir::STOP);
-    setPump(pumps_t::PH_MINUS, pump_dir::STOP);
+    disableAllPumps();
 
     s.stopTask(t10_reverse_task);
 }
@@ -912,6 +897,7 @@ void CalibrateState::exit(fsm_t &fsm) {
   setActiveCalibration(point_t::COUNT);
   s.stopTask(led2_task);
   s.stopTask(t3_measure_task);
+  disableMeasurement();
 }
 
 void CalibrateState::update(fsm_t &fsm) {
@@ -931,6 +917,14 @@ void CalibrateState::update(fsm_t &fsm) {
   }
 }
 
+void disableAllPumps()
+{
+    setPump(pumps_t::MAIN_PUMP, pump_dir::STOP);
+    setPump(pumps_t::FERTILIZER_A, pump_dir::STOP);
+    setPump(pumps_t::FERTILIZER_B, pump_dir::STOP);
+    setPump(pumps_t::PH_PLUS, pump_dir::STOP);
+    setPump(pumps_t::PH_MINUS, pump_dir::STOP);
+}
 
 void setPump(pumps_t pump, pump_dir dir)
 {

@@ -73,7 +73,6 @@ struct cal_point_t {
 
 // ---------------- Constants ----------------
 extern const float VREF;
-extern const int ADC_RES;
 extern const float TEMP0_K;
 
 extern const float R_SERIES_EC;

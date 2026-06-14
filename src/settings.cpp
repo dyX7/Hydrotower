@@ -40,7 +40,7 @@ const pin_t gpio4  {4,  "GPIO4"};    // BOOT STRAP | ADC2_CH0 | TOUCH0 | AVOID
 const pin_t gpio5  {5,  "GPIO5"};    // SPI CS | BOOT STRAP | AVOID
 const pin_t gpio12 {12, "GPIO12"};   // BOOT STRAP | ADC2_CH5 | TOUCH5 | AVOID
 const pin_t gpio15 {15, "GPIO15"};   // BOOT STRAP | ADC2_CH3 | AVOID      
-const pin_t gpio14 {14, ""};        // GPIO14 | ADC2_CH6 | PWM | SAFE
+const pin_t gpio14 {14, ""};         // GPIO14 | ADC2_CH6 | PWM | SAFE
 
 
 // ---------------- GPIO ----------------
@@ -67,7 +67,6 @@ pwm_out_t pwmFertilizerBRev(pinPwmMot5Rev, 8, 2000, 8, 0.8f, false);
 
 // ---------------- Constants ----------------
 const float VREF = 3.3;
-const int ADC_RES = 4095;
 const float TEMP0_K = 298.15;
 
 const float R_SERIES_EC = 10000;
@@ -81,14 +80,10 @@ const float EC_A = 7.0;
 const float EC_B = 4.0;
 
 // ---------------- Calibration ----------------
-cal_point_t ph_cal_1 {7.0, 2.50, 25.0};
-cal_point_t ph_cal_2 {4.0, 3.00, 25.0};
+cal_point_t ph_cal_1 {7.0, 2.2, 25.0};
+cal_point_t ph_cal_2 {4.0, 2.86, 25.0};
 cal_point_t ec_cal_1 {1.41, 2.50, 25.0};
 cal_point_t ec_cal_2 {12.88, 3.00, 25.0};
 
 const temp_cfg_t ec_temp_cfg {10000.0, 3950.0, 10000.0};
 const temp_cfg_t ph_temp_cfg {10000.0, 3950.0, 10000.0};
-
-const int CTRL_FREQ = 5000;
-const float CTRL_TIME = 1000000/(CTRL_FREQ*2*3);
-const float MEASURE_TIME = 500;

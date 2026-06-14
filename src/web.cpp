@@ -85,29 +85,35 @@ void web_log(const String &msg)
 
 void web_pumps(pumps_t pump, pump_dir dir)
 {
+  // get actual dir
+  auto actualDir = pumps[static_cast<size_t>(pump)];
+
+  // set new dir
   pumps[static_cast<size_t>(pump)] = dir;
 
-  String pumpName;
-
-  switch(pump)
+  // trace in case of new dir
+  if(actualDir != dir)
   {
-    case pumps_t::MAIN_PUMP: pumpName = "MAIN_PUMP"; break;
-    case pumps_t::PH_PLUS: pumpName = "PH_PLUS"; break;
-    case pumps_t::PH_MINUS: pumpName = "PH_MINUS"; break;
-    case pumps_t::FERTILIZER_A: pumpName = "FERTILIZER_A"; break;
-    case pumps_t::FERTILIZER_B: pumpName = "FERTILIZER_B"; break;
+    String pumpName;
+    switch(pump)
+    {
+      case pumps_t::MAIN_PUMP: pumpName = "MAIN_PUMP"; break;
+      case pumps_t::PH_PLUS: pumpName = "PH_PLUS"; break;
+      case pumps_t::PH_MINUS: pumpName = "PH_MINUS"; break;
+      case pumps_t::FERTILIZER_A: pumpName = "FERTILIZER_A"; break;
+      case pumps_t::FERTILIZER_B: pumpName = "FERTILIZER_B"; break;
+    }
+
+    String dirName;
+    switch(dir)
+    {
+      case pump_dir::STOP: dirName = "STOP"; break;
+      case pump_dir::PUMP: dirName = "PUMP"; break;
+      case pump_dir::REVERSE: dirName = "REVERSE"; break;
+    }
+
+    web_log(String("Pump ") + pumpName + " -> " + dirName);
   }
-
-  String dirName;
-
-  switch(dir)
-  {
-    case pump_dir::STOP: dirName = "STOP"; break;
-    case pump_dir::PUMP: dirName = "PUMP"; break;
-    case pump_dir::REVERSE: dirName = "REVERSE"; break;
-  }
-
-  web_log(String("Pump ") + pumpName + " -> " + dirName);
 }
 
 // ==================================================
@@ -2498,7 +2504,6 @@ void setupRoutes()
   server.on("/start_measure", HTTP_GET, [](AsyncWebServerRequest *req)
   {
     scheduler.startTask(measure_process_task);
-    scheduler.startTask(measure_read_task);
     setStopLock(true);
     fsm.transitionTo(&STATE_STOP);
     req->send(200, "text/plain", "OK");
@@ -2507,7 +2512,6 @@ void setupRoutes()
   server.on("/stop_measure", HTTP_GET, [](AsyncWebServerRequest *req)
   {
     scheduler.stopTask(measure_process_task);
-    scheduler.stopTask(measure_read_task);
     setStopLock(false);
     fsm.transitionTo(&STATE_IDLE);
     req->send(200, "text/plain", "OK");

@@ -9,7 +9,6 @@ extern scheduler_t scheduler;
 
 extern task_t t3_measure_task;
 extern task_t measure_process_task;
-extern task_t measure_read_task;
 
 extern int cycle_time_minutes;
 extern int watering_minutes;
@@ -258,6 +257,7 @@ public:
 };
 
 void setPump(pumps_t pump, pump_dir dir);
+void disableAllPumps();
 
 
 // ---------------- Instances ----------------
