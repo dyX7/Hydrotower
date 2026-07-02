@@ -38,7 +38,6 @@ extern const pin_t pinPwmMot5Rev;
 extern const pin_t adcEc;
 extern const pin_t adcPh;
 extern const pin_t adcEcTemp;
-// extern const pin_t adcPhTemp;
 
 // ---------------- GPIO ----------------
 

@@ -1,37 +1,36 @@
 #include "settings.hpp"
 
 // ------------ Status ----------------
-const pin_t waterLow {22, "WATER_LOW"};         // GPIO22 | I2C SCL | PWM | SAFE
-const pin_t deviceRelais {23, "EN_DEVICES"};    // GPIO23 | SPI MOSI | PWM | SAFE
+const pin_t waterLow {22, "WATER_LOW"};
+const pin_t deviceRelais {23, "EN_DEVICES"};
 
 // ------------ EC / pH Control ----------------
-const pin_t gpioEc1 {25, "EC1"};         // GPIO25 | DAC1 | PWM | SAFE
-const pin_t gpioEc2 {26, "EC2"};         // GPIO26 | DAC2 | PWM | SAFE
+const pin_t gpioEc1 {33, "EC1"};
+const pin_t gpioEc2 {32, "EC2"};
 
 // ------------ Main Pump ----------------
-const pin_t gpioMot1 {21, "MOT_MAIN"};  // GPIO21 | I2C SDA | PWM | SAFE
+const pin_t gpioMot1 {21, "MOT_MAIN"};
 
 // ------------ pH+ Pump ----------------
-const pin_t pinPwmMot2Dose {33, "MOT_PH+_Dose"}; // GPIO33 | ADC1 (RESERVED) | PWM
-const pin_t pinPwmMot2Rev  {16, "MOT_PH+_Rev"};  // GPIO16 | UART2 RX | PWM
+const pin_t pinPwmMot2Dose {25, "MOT_PH+_Dose"};
+const pin_t pinPwmMot2Rev  {26, "MOT_PH+_Rev"};
 
 // ------------ pH- Pump ----------------
-const pin_t pinPwmMot3Dose {17, "MOT_PH-_Dose"}; // GPIO17 | UART2 TX | PWM
-const pin_t pinPwmMot3Rev  {18, "MOT_PH-_Rev"};  // GPIO18 | SPI CLK | PWM
+const pin_t pinPwmMot3Dose {27, "MOT_PH-_Dose"};
+const pin_t pinPwmMot3Rev  {13, "MOT_PH-_Rev"}; 
 
 // ------------ Fertilizer A ----------------
-const pin_t pinPwmMot4Dose {19, "MOT_FERT_A_Dose"}; // GPIO19 | SPI MISO | PWM
-const pin_t pinPwmMot4Rev  {13, "MOT_FERT_A_Rev"};  // GPIO13 | ADC2 | TOUCH | PWM
+const pin_t pinPwmMot4Dose {19, "MOT_FERT_A_Dose"};
+const pin_t pinPwmMot4Rev  {18, "MOT_FERT_A_Rev"};
 
 // ------------ Fertilizer B ----------------
-const pin_t pinPwmMot5Dose {32, "MOT_FERT_B_Dose"}; // GPIO32 | ADC1 (RESERVED) | PWM
-const pin_t pinPwmMot5Rev  {27, "MOT_FERT_B_Rev"};  // GPIO27 | ADC2_CH7 | PWM | SAFE
+const pin_t pinPwmMot5Dose {17, "MOT_FERT_B_Dose"};
+const pin_t pinPwmMot5Rev  {16, "MOT_FERT_B_Rev"};
 
 // ------------ Analog Sensors ----------------
-const pin_t adcPh     {35, "PH"};        // GPIO35 | ADC1_CH7 | INPUT ONLY
-const pin_t adcEc     {39, "EC"};        // GPIO39 | ADC1_CH3 | INPUT ONLY
-const pin_t adcEcTemp {34, "EC_T"};      // GPIO34 | ADC1_CH6 | INPUT ONLY
-// const pin_t adcPhTemp {36, "PH_T"};      // GPIO36 | ADC1_CH0 | INPUT ONLY
+const pin_t adcPh     {34, "PH"};        // GPIO35 | ADC1_CH7 | INPUT ONLY
+const pin_t adcEc     {35, "EC"};        // GPIO39 | ADC1_CH3 | INPUT ONLY
+const pin_t adcEcTemp {39, "EC_T"};      // GPIO34 | ADC1_CH6 | INPUT ONLY
 
 // ------------ UNUSED / BOOT STRAP PINS ------------
 const pin_t gpio0  {0,  "GPIO0"};    // BOOT MODE | STRAP PIN | AVOID
