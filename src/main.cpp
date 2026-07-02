@@ -10,38 +10,12 @@
 scheduler_t scheduler;
 fsm_t fsm{scheduler};
 
-// ---------------- LED ----------------
-void toggleLed1() 
-{
-  static bool state = false;
-  led1.set(state);
-  state = !state;
-}
-
-void disableLed1() 
-{
-  led1.set(false);
-}
-
-void toggleLed2() 
-{
-  static bool state = false;
-  led2.set(state);
-  state = !state;
-}
-
-void disableLed2() 
-{
-  led2.set(false);
-}
-
 // ---------------- Setup ----------------
 void setup() 
 {
   Serial.begin(115200);
 
-  analogReadResolution(12);
-  analogSetAttenuation(ADC_11db);
+  setupSensors();
 
   web_init();
   fsm.begin(&STATE_INIT);
@@ -52,6 +26,7 @@ void setup()
 // ---------------- Loop ----------------
 void loop() 
 {
+  updateSensors();
   fsm.poll();
   scheduler.poll();
   web_loop();

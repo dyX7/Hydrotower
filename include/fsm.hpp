@@ -8,7 +8,6 @@ class fsm_t;
 extern scheduler_t scheduler;
 
 extern task_t t3_measure_task;
-extern task_t measure_process_task;
 
 extern int cycle_time_minutes;
 extern int watering_minutes;
@@ -69,7 +68,6 @@ public:
   void setError() { error = true; }
   bool isSleepTime();
   void event1sec();
-  void eventCalib();
   scheduler_t &scheduler() { return _s; }
   const char* stateName() const;
 

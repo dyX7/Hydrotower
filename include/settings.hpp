@@ -17,9 +17,11 @@ enum class pump_dir : uint8_t
   REVERSE
 };
 
-// ------------ GPIO Pins ----------------
-extern const pin_t pinLed2;
-extern const pin_t pinLed1;
+// ------------ GPIO IN ----------------
+extern const pin_t waterLow;
+
+// ------------ GPIO OUT ----------------
+extern const pin_t deviceRelais;
 extern const pin_t gpioEc1;
 extern const pin_t gpioEc2;
 extern const pin_t pinPwmMot1;
@@ -36,17 +38,16 @@ extern const pin_t pinPwmMot5Rev;
 extern const pin_t adcEc;
 extern const pin_t adcPh;
 extern const pin_t adcEcTemp;
-extern const pin_t adcPhTemp;
+// extern const pin_t adcPhTemp;
 
 // ---------------- GPIO ----------------
-extern gpio_out_t led1;
-extern gpio_out_t led2;
 
 extern gpio_out_t gpioEcMeasure1;
 extern gpio_out_t gpioEcMeasure2;
 
 extern gpio_out_t gpioMainPump;
-
+extern gpio_out_t tankStatus;
+extern gpio_out_t enDevices;
 extern pwm_out_t pwmPHplusDose;
 extern pwm_out_t pwmPHplusRev;
 extern pwm_out_t pwmPHminusDose;
@@ -74,18 +75,10 @@ struct cal_point_t {
 // ---------------- Constants ----------------
 extern const float VREF;
 extern const float TEMP0_K;
+extern const uint32_t MOTOR_PWM_FREQ;
+extern const float MOTOR_DUTY_PERCENT;
 
-extern const float R_SERIES_EC;
-extern const float K_CELL;
-extern const float ALPHA;
-
-extern const float ph_p1;
-extern const float ph_p2;
-
-extern const float EC_A;
-extern const float EC_B;
-
-// ---------------- Calibration ----------------
+// ---------------- Calibration Defaults ----------------
 extern cal_point_t ph_cal_1;
 extern cal_point_t ph_cal_2;
 extern cal_point_t ec_cal_1;
@@ -97,8 +90,4 @@ extern bool ec_cal_1_valid;
 extern bool ec_cal_2_valid;
 
 extern const temp_cfg_t ec_temp_cfg;
-extern const temp_cfg_t ph_temp_cfg;
-
-extern const int CTRL_FREQ;
-extern const float CTRL_TIME;
-extern const float MEASURE_TIME;
+// extern const temp_cfg_t ph_temp_cfg;

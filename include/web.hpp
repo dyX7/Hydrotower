@@ -7,6 +7,8 @@ void web_loop();
 
 // data logging
 void web_add_data_hist(float ec, float ph, float temp);
+extern void clearEcHistory();
+extern void clearPhHistory();
 void web_log(const String &msg);
 void web_pumps(pumps_t pump, pump_dir dir);
 

@@ -1,8 +1,8 @@
 #include "settings.hpp"
 
-// ------------ Status LEDs ----------------
-const pin_t pinLed1 {22, "LED1"};        // GPIO22 | I2C SCL | PWM | SAFE
-const pin_t pinLed2 {23, "LED2"};        // GPIO23 | SPI MOSI | PWM | SAFE
+// ------------ Status ----------------
+const pin_t waterLow {22, "WATER_LOW"};         // GPIO22 | I2C SCL | PWM | SAFE
+const pin_t deviceRelais {23, "EN_DEVICES"};    // GPIO23 | SPI MOSI | PWM | SAFE
 
 // ------------ EC / pH Control ----------------
 const pin_t gpioEc1 {25, "EC1"};         // GPIO25 | DAC1 | PWM | SAFE
@@ -31,7 +31,7 @@ const pin_t pinPwmMot5Rev  {27, "MOT_FERT_B_Rev"};  // GPIO27 | ADC2_CH7 | PWM |
 const pin_t adcPh     {35, "PH"};        // GPIO35 | ADC1_CH7 | INPUT ONLY
 const pin_t adcEc     {39, "EC"};        // GPIO39 | ADC1_CH3 | INPUT ONLY
 const pin_t adcEcTemp {34, "EC_T"};      // GPIO34 | ADC1_CH6 | INPUT ONLY
-const pin_t adcPhTemp {36, "PH_T"};      // GPIO36 | ADC1_CH0 | INPUT ONLY
+// const pin_t adcPhTemp {36, "PH_T"};      // GPIO36 | ADC1_CH0 | INPUT ONLY
 
 // ------------ UNUSED / BOOT STRAP PINS ------------
 const pin_t gpio0  {0,  "GPIO0"};    // BOOT MODE | STRAP PIN | AVOID
@@ -44,46 +44,36 @@ const pin_t gpio14 {14, ""};         // GPIO14 | ADC2_CH6 | PWM | SAFE
 
 
 // ---------------- GPIO ----------------
-gpio_out_t led1{pinLed1};
-gpio_out_t led2{pinLed2};
+gpio_out_t waterLevelLow{waterLow};
+gpio_out_t enDevices{deviceRelais};
 
 gpio_out_t gpioEcMeasure1{gpioEc1};
 gpio_out_t gpioEcMeasure2{gpioEc2};
 
 gpio_out_t gpioMainPump{gpioMot1};
 
-pwm_out_t pwmPHplusDose(pinPwmMot2Dose, 1, 2000, 8, 0.8f, false);
-pwm_out_t pwmPHplusRev(pinPwmMot2Rev, 2, 2000, 8, 0.8f, false);
-
-pwm_out_t pwmPHminusDose(pinPwmMot3Dose, 3, 2000, 8, 0.8f, false);
-pwm_out_t pwmPHminusRev(pinPwmMot3Rev, 4, 2000, 8, 0.8f, false);
-
-pwm_out_t pwmFertilizerADose(pinPwmMot4Dose, 5, 2000, 8, 0.8f, false);
-pwm_out_t pwmFertilizerARev(pinPwmMot4Rev, 6, 2000, 8, 0.8f, false);
-
-pwm_out_t pwmFertilizerBDose(pinPwmMot5Dose, 7, 2000, 8, 0.8f, false);
-pwm_out_t pwmFertilizerBRev(pinPwmMot5Rev, 8, 2000, 8, 0.8f, false);
+pwm_out_t pwmPHplusDose(pinPwmMot2Dose, 1,  MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
+pwm_out_t pwmPHplusRev(pinPwmMot2Rev, 2,    MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
+pwm_out_t pwmPHminusDose(pinPwmMot3Dose, 3, MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
+pwm_out_t pwmPHminusRev(pinPwmMot3Rev, 4,   MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
+pwm_out_t pwmFertilizerADose(pinPwmMot4Dose, 5, MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
+pwm_out_t pwmFertilizerARev(pinPwmMot4Rev, 6,   MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
+pwm_out_t pwmFertilizerBDose(pinPwmMot5Dose, 7, MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
+pwm_out_t pwmFertilizerBRev(pinPwmMot5Rev, 8,   MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
 
 
 // ---------------- Constants ----------------
 const float VREF = 3.3;
 const float TEMP0_K = 298.15;
+const uint32_t MOTOR_PWM_FREQ = 2000;
+const float MOTOR_DUTY_PERCENT = 0.7f;
 
-const float R_SERIES_EC = 10000;
-const float K_CELL = 1.0;
-const float ALPHA = 0.02;
 
-const float ph_p1 = 7.0;
-const float ph_p2 = 4.0;
-
-const float EC_A = 7.0;
-const float EC_B = 4.0;
-
-// ---------------- Calibration ----------------
+// ---------------- Calibration Defaults ----------------
 cal_point_t ph_cal_1 {7.0, 2.2, 25.0};
 cal_point_t ph_cal_2 {4.0, 2.86, 25.0};
 cal_point_t ec_cal_1 {1.41, 2.50, 25.0};
 cal_point_t ec_cal_2 {12.88, 3.00, 25.0};
 
 const temp_cfg_t ec_temp_cfg {10000.0, 3950.0, 10000.0};
-const temp_cfg_t ph_temp_cfg {10000.0, 3950.0, 10000.0};
+// const temp_cfg_t ph_temp_cfg {10000.0, 3950.0, 10000.0};

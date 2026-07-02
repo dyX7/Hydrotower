@@ -144,6 +144,26 @@ void web_add_data_hist(float ec_v, float ph_v, float temp)
   }
 }
 
+void clearEcHistory()
+{
+    for (int i = 0; i < MAX_POINTS; i++)
+    {
+        ec_hist[i] = 0.0f;
+    }
+
+    saveHistory();
+}
+
+void clearPhHistory()
+{
+    for (int i = 0; i < MAX_POINTS; i++)
+    {
+        ph_hist[i] = 0.0f;
+    }
+
+    saveHistory();
+}
+
 // ==================================================
 // SAVE HISTORY
 // ==================================================
@@ -728,7 +748,7 @@ button { padding:10px; margin:5px; }
           <div class="paramRow">
             <div class="timerLabel">EC Tol</div>
             <input id="ecTol" class="timerValue" type="number" step="0.01">
-            <div class="timerUnit">±</div>
+            <div class="timerUnit">-</div>
           </div>
 
           <div class="paramRow">
@@ -900,13 +920,15 @@ button { padding:10px; margin:5px; }
       ">
 
         <div>
-          EC: <span id="ecVoltageLive">0.000</span> V /
-          <span id="ecTempMeasure">0.0</span> °C
+          TEMP: <span id="tempMeasure">0.0</span> °C
         </div>
 
         <div>
-          PH: <span id="phVoltageLive">0.000</span> V /
-          <span id="phTempMeasure">0.0</span> °C
+          EC: <span id="ecVoltageLive">0.000</span> V
+        </div>
+
+        <div>
+          PH: <span id="phVoltageLive">0.000</span> V
         </div>
 
       </div>
@@ -953,7 +975,6 @@ button { padding:10px; margin:5px; }
         <div style="font-size:11px; line-height:1.2; margin-left:6px;">
           <div>
             <span id="cal_ec_p1_v">--</span>
-            <span id="cal_ec_p1_val">--</span>
             <span id="cal_ec_p1_temp">--</span>
           </div>
         </div>
@@ -979,7 +1000,6 @@ button { padding:10px; margin:5px; }
         <div style="font-size:11px; line-height:1.2; margin-left:6px;">
           <div>
             <span id="cal_ec_p2_v">--</span>
-            <span id="cal_ec_p2_val">--</span>
             <span id="cal_ec_p2_temp">--</span>
           </div>
         </div>
@@ -1005,7 +1025,6 @@ button { padding:10px; margin:5px; }
         <div style="font-size:11px; line-height:1.2; margin-left:6px;">
           <div>
             <span id="cal_ph_p1_v">--</span>
-            <span id="cal_ph_p1_val">--</span>
             <span id="cal_ph_p1_temp">--</span>
           </div>
         </div>
@@ -1031,7 +1050,6 @@ button { padding:10px; margin:5px; }
         <div style="font-size:11px; line-height:1.2; margin-left:6px;">
           <div>
             <span id="cal_ph_p2_v">--</span>
-            <span id="cal_ph_p2_val">--</span>
             <span id="cal_ph_p2_temp">--</span>
           </div>
         </div>
@@ -1086,6 +1104,7 @@ let calPhHist = [];
 let calTempHist = [];
 
 const CAL_POINTS = 60;
+const MAX_HOURS = 72;
 
 function showTab(id)
 {
@@ -1147,7 +1166,7 @@ function setState(route)
   if(route === '/calibrate_ec_p1')
   {
     const v = document.getElementById('ecCal1Value').value;
-    const t = document.getElementById('ecTempMeasure').innerText;
+    const t = document.getElementById('tempMeasure').innerText;
     fetch(`/calibrate_ec_p1?value=${v}&temp=${t}`);
     return;
   }
@@ -1155,7 +1174,7 @@ function setState(route)
   if(route === '/calibrate_ec_p2')
   {
     const v = document.getElementById('ecCal2Value').value;
-    const t = document.getElementById('ecTempMeasure').innerText;
+    const t = document.getElementById('tempMeasure').innerText;
     fetch(`/calibrate_ec_p2?value=${v}&temp=${t}`);
     return;
   }
@@ -1163,7 +1182,7 @@ function setState(route)
   if(route === '/calibrate_ph_p1')
   {
     const v = document.getElementById('phCal1Value').value;
-    const t = document.getElementById('phTempMeasure').innerText;
+    const t = document.getElementById('tempMeasure').innerText;
     fetch(`/calibrate_ph_p1?value=${v}&temp=${t}`);
     return;
   }
@@ -1171,7 +1190,7 @@ function setState(route)
   if(route === '/calibrate_ph_p2')
   {
     const v = document.getElementById('phCal2Value').value;
-    const t = document.getElementById('phTempMeasure').innerText;
+    const t = document.getElementById('tempMeasure').innerText;
     fetch(`/calibrate_ph_p2?value=${v}&temp=${t}`);
     return;
   }
@@ -1414,9 +1433,7 @@ let chartEC = new Chart(document.getElementById('chartEC'), {
           callback: function(value, index) {
 
             let cycleMin = parseInt(document.getElementById('idle').value) || 1;
-            let hours = (index * cycleMin) / 60.0;
-
-            return hours.toFixed(1) + "h";
+            return ((index * cycleMin) / 60.0).toFixed(1) + "h";
           },
 
           maxRotation: 0,
@@ -1527,9 +1544,7 @@ let chartPH = new Chart(document.getElementById('chartPH'), {
           callback: function(value, index) {
 
             let cycleMin = parseInt(document.getElementById('idle').value) || 1;
-            let hours = (index * cycleMin) / 60.0;
-
-            return hours.toFixed(1) + "h";
+            return ((index * cycleMin) / 60.0).toFixed(1) + "h";
           },
 
           maxRotation: 0,
@@ -1610,9 +1625,7 @@ let chartTEMP = new Chart(document.getElementById('chartTEMP'), {
           callback: function(value, index) {
 
             let cycleMin = parseInt(document.getElementById('idle').value) || 1;
-            let hours = (index * cycleMin) / 60.0;
-
-            return hours.toFixed(1) + "h";
+            return ((index * cycleMin) / 60.0).toFixed(1) + "h";
           },
 
           maxRotation: 0,
@@ -1739,49 +1752,31 @@ async function update()
       document.getElementById('phVoltageLive').innerText =
         Number(d.vPhMeasure || 0).toFixed(3);
 
-      document.getElementById('ecTempMeasure').innerText =
-        Number(d.ecTempMeasure || 0).toFixed(1);
-
-      document.getElementById('phTempMeasure').innerText =
-        Number(d.phTempMeasure || 0).toFixed(1);
+      document.getElementById('tempMeasure').innerText =
+        Number(d.tempMeasure || 0).toFixed(1);
 
       if(d.calib)
       {
         document.getElementById('cal_ec_p1_v').innerText =
           Number(d.calib.ec_p1.voltage).toFixed(3) + " V";
 
-        document.getElementById('cal_ec_p1_val').innerText =
-          Number(d.calib.ec_p1.value).toFixed(2) + " mS/cm";
-
         document.getElementById('cal_ec_p1_temp').innerText =
           Number(d.calib.ec_p1.temp).toFixed(1) + " °C";
-
 
         document.getElementById('cal_ec_p2_v').innerText =
           Number(d.calib.ec_p2.voltage).toFixed(3) + " V";
 
-        document.getElementById('cal_ec_p2_val').innerText =
-          Number(d.calib.ec_p2.value).toFixed(2) + " mS/cm";
-
         document.getElementById('cal_ec_p2_temp').innerText =
           Number(d.calib.ec_p2.temp).toFixed(1) + " °C";
 
-
         document.getElementById('cal_ph_p1_v').innerText =
           Number(d.calib.ph_p1.voltage).toFixed(3) + " V";
-
-        document.getElementById('cal_ph_p1_val').innerText =
-          Number(d.calib.ph_p1.value).toFixed(2) + " pH";
           
         document.getElementById('cal_ph_p1_temp').innerText =
           Number(d.calib.ph_p1.temp).toFixed(1) + " °C";
 
-
         document.getElementById('cal_ph_p2_v').innerText =
           Number(d.calib.ph_p2.voltage).toFixed(3) + " V";
-
-        document.getElementById('cal_ph_p2_val').innerText =
-          Number(d.calib.ph_p2.value).toFixed(2) + " pH";
 
         document.getElementById('cal_ph_p2_temp').innerText =
           Number(d.calib.ph_p2.temp).toFixed(1) + " °C";
@@ -1818,39 +1813,55 @@ async function update()
 
     if(d.labels && d.ec_hist)
     {
-      chartEC.data.labels = d.labels;
-      chartEC.data.datasets[0].data = d.ec_hist;
+      let cycleMin = parseInt(document.getElementById('idle').value) || 1;
+      let maxPoints = Math.floor((72 * 60) / cycleMin);
+
+      let labels = d.labels.slice(-maxPoints);
+      let ec = d.ec_hist.slice(-maxPoints);
+
+      chartEC.data.labels = labels;
+      chartEC.data.datasets[0].data = ec;
+
       chartEC.data.datasets[1].data =
-        d.labels.map(() => (d.ecReg != null ? d.ecReg : 0));
+        labels.map(() => (d.ecReg ?? 0));
 
       chartEC.data.datasets[2].data =
-        d.labels.map(() => (d.ecReg != null ? d.ecReg : 0) - (d.ecTol != null ? d.ecTol : 0));
+        labels.map(() => (d.ecReg ?? 0) - (d.ecTol ?? 0));
 
       chartEC.update();
     }
 
     if(d.labels && d.ph_hist)
     {
-      chartPH.data.labels = d.labels;
+      let cycleMin = parseInt(document.getElementById('idle').value) || 1;
+      let maxPoints = Math.floor((72 * 60) / cycleMin);
 
-      chartPH.data.datasets[0].data = d.ph_hist;
+      let labels = d.labels.slice(-maxPoints);
+      let ph = d.ph_hist.slice(-maxPoints);
+
+      chartPH.data.labels = labels;
+      chartPH.data.datasets[0].data = ph;
 
       chartPH.data.datasets[1].data =
-        d.labels.map(() => (d.phReg != null ? d.phReg : 0));
+        labels.map(() => (d.phReg ?? 0));
 
       chartPH.data.datasets[2].data =
-        d.labels.map(() => (d.phReg != null ? d.phReg : 0) + (d.phTol != null ? d.phTol : 0));
+        labels.map(() => (d.phReg ?? 0) + (d.phTol ?? 0));
 
       chartPH.data.datasets[3].data =
-        d.labels.map(() => (d.phReg != null ? d.phReg : 0) - (d.phTol != null ? d.phTol : 0));
+        labels.map(() => (d.phReg ?? 0) - (d.phTol ?? 0));
 
       chartPH.update();
     }
 
     if(d.labels && d.temp_hist)
     {
-      chartTEMP.data.labels = d.labels;
-      chartTEMP.data.datasets[0].data = d.temp_hist;
+      let cycleMin = parseInt(document.getElementById('idle').value) || 1;
+      let maxPoints = Math.floor((72 * 60) / cycleMin);
+
+      chartTEMP.data.labels = d.labels.slice(-maxPoints);
+      chartTEMP.data.datasets[0].data = d.temp_hist.slice(-maxPoints);
+
       chartTEMP.update();
     }
 
@@ -2055,9 +2066,8 @@ String buildJson()
   json += "\"ph\":" + String(phMeasure, 2) + ",";
   json += "\"ecTol\":" + String(ec_tolerance, 2) + ",";
   json += "\"phTol\":" + String(ph_tolerance, 2) + ",";
-  json += "\"temp\":" + String(meanTemp, 2) + ",";
-  json += "\"ecTempMeasure\":" + String(ecTempMeasure, 2) + ",";
-  json += "\"phTempMeasure\":" + String(phTempMeasure, 2) + ",";
+  json += "\"temp\":" + String(tempMeasure, 2) + ",";
+  json += "\"tempMeasure\":" + String(tempMeasure, 2) + ",";
   json += "\"vEcMeasure\":" + String(vEcMeasure, 3) + ",";
   json += "\"vPhMeasure\":" + String(vPhMeasure, 3) + ",";
 
@@ -2503,7 +2513,7 @@ void setupRoutes()
 
   server.on("/start_measure", HTTP_GET, [](AsyncWebServerRequest *req)
   {
-    scheduler.startTask(measure_process_task);
+    enableMeasurement();
     setStopLock(true);
     fsm.transitionTo(&STATE_STOP);
     req->send(200, "text/plain", "OK");
@@ -2511,7 +2521,7 @@ void setupRoutes()
 
   server.on("/stop_measure", HTTP_GET, [](AsyncWebServerRequest *req)
   {
-    scheduler.stopTask(measure_process_task);
+    disableMeasurement();
     setStopLock(false);
     fsm.transitionTo(&STATE_IDLE);
     req->send(200, "text/plain", "OK");

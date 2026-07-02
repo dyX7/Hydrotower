@@ -5,23 +5,20 @@
 #include <web.hpp>
 
 // ===================== GLOBAL STATE =====================
-extern bool active_history;
+extern bool read_sensors;
 
-extern float ecTempMeasure;
-extern float phTempMeasure;
+extern float tempMeasure;
+
 extern float ecMeasure;
 extern float phMeasure;
+
+extern float vMilliEcInterrupt;
 extern float vEcMeasure;
 extern float vPhMeasure;
-extern float meanTemp;
 
-extern MovingMean ecFilter;
-extern MovingMean phFilter;
-extern MovingMean ecTempFilter;
-extern MovingMean phTempFilter;
+extern MovingMean tempFilter;
 extern MovingMean vEcFilter;
 extern MovingMean vPhFilter;
-
 
 enum class point_t : uint8_t
 {
@@ -33,6 +30,8 @@ enum class point_t : uint8_t
 };
 
 // ===================== SENSOR API =====================
+void setupSensors();
+
 float readVoltage(const pin_t& pin);
 
 float readTemperature(const pin_t& pin, const temp_cfg_t& cfg);
@@ -44,9 +43,6 @@ float linearCalibrate(
     const cal_point_t& p2
 );
 
-float readEC(const pin_t& pin);
-float readPH(const pin_t& pin);
-
 void logCalPoint(const String& label, const cal_point_t& p);
 
 extern void setActiveCalibration(point_t point);
@@ -54,5 +50,7 @@ extern void applyCalibration();
 
 extern void tempProcess();
 extern void sensorProcess();
+extern void updateSensors();
 
+extern void enableMeasurement();
 extern void disableMeasurement();

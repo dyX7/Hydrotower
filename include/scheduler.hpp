@@ -15,6 +15,11 @@ struct Time {
   static Time min(uint64_t v);
   static Time hours(uint64_t v);
   static Time days(uint64_t v);
+
+  uint64_t operator/(const Time& other) const 
+  {
+      return us / other.us;
+  }
 };
 
 // ---------------- Task Handle ----------------

@@ -6,10 +6,6 @@
 #include <sensor.hpp>
 
 // ---- external functions ----
-extern void toggleLed1();
-extern void disableLed1();
-extern void toggleLed2();
-extern void disableLed2();
 
 inline Time minToTime(int minutes)
 {
@@ -35,9 +31,17 @@ bool added_fertilizer{false};
 bool added_ph_plus{false};
 bool added_ph_minus{false};
 
-uint32_t last_fertilize_cycle = 0;
-uint32_t last_ph_plus_cycle = 0;
-uint32_t last_ph_minus_cycle = 0;
+const Time FERTILIZER_LOCK  =  Time::hours(12);
+const Time PH_PLUS_LOCK     =  Time::hours(48);
+const Time PH_MINUS_LOCK    =  Time::hours(24);
+
+uint32_t firtilizer_unlock{100};
+uint32_t ph_plus_unlock{100};
+uint32_t ph_minus_unlock{100};
+
+uint32_t fertilize_cycle = 0;
+uint32_t ph_plus_cycle = 0;
+uint32_t ph_minus_cycle = 0;
 
 bool stop_locked{false};
 void setStopLock(bool lock)
@@ -53,8 +57,6 @@ int sleep_end_minute;
 
 uint32_t remaining_seconds = 0;
 
-task_t led1_task            { "LED1" };
-task_t led2_task            { "LED2" };
 task_t t1_idle_task         { "WAIT" };
 task_t t21_watering_task    { "WATERING" };
 task_t t22_watering_delay   { "WATERING_DELAY" };
@@ -65,11 +67,8 @@ task_t t3_measure_task      { "MEASURE" };
 task_t t45_fertilize_task   { "FERTILIZE" };
 task_t t46_wait_task        { "REG_WAIT" };
 task_t t67_ph_task          { "PH" };
-task_t measure_process_task { "MEAS_PROC" };
 task_t second_task          { "SECOND" };
 
-Time led1_timeout{Time::ms(500)};
-Time led2_timeout{ Time::ms(100)};
 inline Time getCycleTime()        { return minToTime(cycle_time_minutes); }
 inline Time getWateringTimeout()  { return minToTime(watering_minutes); }
 inline Time getFlushTimeout()     { return minToTime(flush_minutes); }
@@ -77,49 +76,50 @@ inline Time getFlushDelayTimeout(){ return Time::sec(flush_delay_seconds); }
 inline Time getFertilizeTimeout() { return Time::sec(fertilize_seconds); }
 inline Time getPhTimeout()        { return Time::sec(ph_seconds); }
 inline Time getReverseTimeout()   { return Time::sec(reverse_seconds); }
-inline bool fertilizerNeeded()    
+inline bool fertilizerNeeded()
 { 
-  if(ecMeasure < (ec_regulator - ec_tolerance))
-  {
-    web_log(String("Fertilizer needed:\n\tcurrent=") + String(ecMeasure, 2) + "\n\ttarget=" + String(ec_regulator, 2) + "\n\ttol=" + String(ec_tolerance, 2));
-    return true;
-  }
-  else
-  {
+    if(fertilize_cycle > firtilizer_unlock)
+    {
+        if(ecMeasure < (ec_regulator - ec_tolerance))
+        {
+            web_log(String("Fertilizer needed:\n\tcurrent=") + String(ecMeasure, 2) + "\n\ttarget=" + String(ec_regulator, 2) + "\n\ttol=" + String(ec_tolerance, 2));
+            return true;
+        }
+    }
     return false;
-  }
+
 }
 
 inline bool phPlusNeeded()        
 { 
-  if(phMeasure < (ph_regulator - ph_tolerance))
-  {
-    web_log(String("PH+ needed:\n\tcurrent=") + String(phMeasure, 2) + "\n\ttarget=" + String(ph_regulator, 2) + "\n\ttol=" + String(ph_tolerance, 2));
-    return true;
-  }
-  else
-  {
+    if(ph_plus_cycle > ph_plus_unlock)
+    {
+        if(phMeasure < (ph_regulator - ph_tolerance))
+        {
+            web_log(String("PH+ needed:\n\tcurrent=") + String(phMeasure, 2) + "\n\ttarget=" + String(ph_regulator, 2) + "\n\ttol=" + String(ph_tolerance, 2));
+            return true;
+        }
+    }
     return false;
-  }
 }
 
 inline bool phMinusNeeded()       
 { 
-  if(phMeasure > (ph_regulator + ph_tolerance))     
-  {
-    web_log(String("PH- needed:\n\tcurrent=") + String(phMeasure, 2) + "\n\ttarget=" + String(ph_regulator, 2) + "\n\ttol=" + String(ph_tolerance, 2));
-    return true;
-  }
-  else
-  {
+    if(ph_minus_cycle > ph_minus_unlock)
+    {
+        if(phMeasure > (ph_regulator + ph_tolerance))     
+        {
+          web_log(String("PH- needed:\n\tcurrent=") + String(phMeasure, 2) + "\n\ttarget=" + String(ph_regulator, 2) + "\n\ttol=" + String(ph_tolerance, 2));
+          return true;
+        }
+    }
     return false;
-  }
 }
 
 Time t2_watering_timeout{getWateringTimeout()};
 Time t8_flush_timeout{getFlushTimeout()};
 Time t9_flush_delay_timeout{getFlushDelayTimeout()};
-Time t3_measure_timeout{Time::min(1)};
+Time t3_measure_timeout{Time::sec(3)};
 Time t45_fertilize_timeout{getFertilizeTimeout()};
 Time t46_wait_timeout{Time::sec(10)};
 Time t67_ph_timeout{getPhTimeout()};
@@ -227,11 +227,6 @@ bool fsm_t::isSleepTime()
   return result;
 }
 
-void fsm_t::eventCalib()
-{
-  tempProcess();
-}
-
 void fsm_t::event1sec()
 {
   struct tm timeinfo;
@@ -325,9 +320,6 @@ void fsm_t::transitionTo(State *next)
 
 void InitState::enter(fsm_t &fsm) {
     auto &s = fsm.scheduler();
-    s.addTask(led1_task, toggleLed1, led1_timeout, disableLed1 );
-    s.addTask(led2_task, toggleLed2, led2_timeout, disableLed2);
-    s.addTask(measure_process_task, sensorProcess, Time::us_(2000) );
     s.addTask(t1_idle_task,       [&fsm]() {fsm.setDone();}, getCycleTime() );
     s.addTask(t21_watering_task,  [&fsm]() {STATE_WATERING_PUMP.done = true; }, getWateringTimeout() );
     s.addTask(t22_watering_delay, [&fsm]() {STATE_WATERING_WAIT.done = true; }, Time::sec(10) );
@@ -368,7 +360,6 @@ void IdleState::enter(fsm_t &fsm) {
   auto &s = fsm.scheduler();
   s.setInterval(t1_idle_task, getCycleTime());
   s.startTask(t1_idle_task);
-
   disableMeasurement();
   disableAllPumps();
 }
@@ -426,7 +417,6 @@ void WateringPumpState::enter(fsm_t &fsm)
 
     s.setInterval(t21_watering_task, getWateringTimeout());
     s.startTask(t21_watering_task);
-    s.startTask(led1_task);
     setPump(pumps_t::MAIN_PUMP, pump_dir::PUMP);
 }
 
@@ -434,7 +424,6 @@ void WateringPumpState::exit(fsm_t &fsm)
 {
     auto &s = fsm.scheduler();
     s.stopTask(t21_watering_task);
-    s.stopTask(led1_task);
     setPump(pumps_t::MAIN_PUMP, pump_dir::STOP);
 }
 
@@ -489,41 +478,59 @@ void WateringWaitState::update(fsm_t &fsm)
 void MeasureState::enter(fsm_t &fsm) 
 {
   auto &s = fsm.scheduler();
-  s.startTask(led2_task);
-  s.startTask(measure_process_task);
+  enableMeasurement();
   s.startTask(t3_measure_task);
-  active_history = true;
 }
 
 void MeasureState::exit(fsm_t &fsm) {
   auto &s = fsm.scheduler();
-  s.stopTask(led2_task);
-  s.stopTask(measure_process_task);
   s.stopTask(t3_measure_task);
-  active_history = false;
   disableMeasurement();
 }
 
 void MeasureState::update(fsm_t &fsm) {
-  auto &s = fsm.scheduler();
-  if (fsm.stop) {
-    setStopLock(true);
-    fsm.transitionTo(&STATE_STOP);
-  }
-  if (done)
-  {
-    if (fertilizerNeeded() ||phPlusNeeded() || phMinusNeeded())
+    auto &s = fsm.scheduler();
+    if (fsm.stop) 
     {
-      fsm.transitionTo(&STATE_REGULATE);
-    } 
-    else {
-      fsm.transitionTo(&STATE_IDLE);
+        setStopLock(true);
+        fsm.transitionTo(&STATE_STOP);
     }
-  }
-  if (fsm.scheduler().nextSecond())
-  {
-    remaining_seconds = s.getRemainingTime(t3_measure_task);
-  }
+    if (done)
+    {
+        fertilize_cycle++;
+        ph_plus_cycle++;
+        ph_minus_cycle++;
+
+        firtilizer_unlock = FERTILIZER_LOCK.us / Time::min(cycle_time_minutes).us;
+        ph_plus_unlock    = PH_PLUS_LOCK.us    / Time::min(cycle_time_minutes).us;
+        ph_minus_unlock   = PH_MINUS_LOCK.us   / Time::min(cycle_time_minutes).us;
+
+        web_log(
+            "fertilize cycle " + String(fertilize_cycle) +
+            "/" + String(firtilizer_unlock));
+        web_log(
+            "ph_plus_cycle " + String(ph_plus_cycle) +
+            "/" + String(ph_plus_unlock));
+        web_log(
+            "ph_minus_cycle " + String(ph_minus_cycle) +
+            "/" + String(ph_minus_unlock));
+
+        // add to history after measurement
+        web_add_data_hist(ecMeasure, phMeasure, tempMeasure);
+
+        if (fertilizerNeeded() ||phPlusNeeded() || phMinusNeeded())
+        {
+            fsm.transitionTo(&STATE_REGULATE);
+        } 
+        else 
+        {
+            fsm.transitionTo(&STATE_IDLE);
+        }
+    }
+    if (fsm.scheduler().nextSecond())
+    {
+        remaining_seconds = s.getRemainingTime(t3_measure_task);
+    }
 }
 
 // ---------- REGULATE ----------
@@ -579,6 +586,7 @@ void Regulate1_FertilizerAState::enter(fsm_t &fsm)
     s.setInterval(t45_fertilize_task, getFertilizeTimeout());
     s.startTask(t45_fertilize_task);
     added_fertilizer = true;
+    fertilize_cycle = 0;
 
     setPump(pumps_t::FERTILIZER_A, pump_dir::PUMP);
 }
@@ -695,6 +703,9 @@ void RegulatePhState::enter(fsm_t &fsm)
 
     s.setInterval(t67_ph_task, getPhTimeout());
     s.startTask(t67_ph_task);
+    
+    ph_plus_cycle = 0;
+    ph_minus_cycle = 0;
 
     if (mode == PhMode::PLUS)
     {
@@ -763,8 +774,6 @@ void FlushPumpState::enter(fsm_t &fsm)
 
     s.setInterval(t8_flush_task, getFlushTimeout());
     s.startTask(t8_flush_task);
-
-    s.startTask(led1_task);
 }
 
 void FlushPumpState::exit(fsm_t &fsm)
@@ -774,7 +783,6 @@ void FlushPumpState::exit(fsm_t &fsm)
     setPump(pumps_t::MAIN_PUMP, pump_dir::STOP);
 
     s.stopTask(t8_flush_task);
-    s.stopTask(led1_task);
 }
 
 void FlushPumpState::update(fsm_t &fsm)
@@ -837,6 +845,7 @@ void FlushReverseState::enter(fsm_t &fsm)
 
     s.startTask(t10_reverse_task);
 
+    // reverse pumps
     if(added_fertilizer)
     {
         setPump(pumps_t::FERTILIZER_A, pump_dir::REVERSE);
@@ -888,14 +897,13 @@ void FlushReverseState::update(fsm_t &fsm)
 void CalibrateState::enter(fsm_t &fsm) 
 {
   auto &s = fsm.scheduler();
-  s.startTask(led2_task);
   s.startTask(t3_measure_task);
+  enableMeasurement();
 }
 
 void CalibrateState::exit(fsm_t &fsm) {
   auto &s = fsm.scheduler();
   setActiveCalibration(point_t::COUNT);
-  s.stopTask(led2_task);
   s.stopTask(t3_measure_task);
   disableMeasurement();
 }
