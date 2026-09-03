@@ -3,9 +3,12 @@
 
 // ===================== GLOBAL DEFINITIONS =====================
 
-bool read_sensors = false;
+bool ec_read = false;
+bool ec_active = false;
+bool ph_active = false;
 
 float tempMeasure = 0;
+float vTempMeasure = 0;
 
 float ecMeasure = 0;
 float phMeasure = 0;
@@ -14,28 +17,27 @@ float vEcInterrupt = 0;
 float vEcMeasure = 0;
 float vPhMeasure = 0;
 
-MovingMean tempFilter(50);
-MovingMean vEcFilter(100);
-MovingMean vPhFilter(100);
+MovingMean tempFilter(10);
+MovingMean vEcFilter(10);
+MovingMean vPhFilter(10);
 
-point_t active_calib_point{point_t::COUNT};
-bool ph_cal_1_valid{false};
-bool ph_cal_2_valid{false};
-bool ec_cal_1_valid{false};
-bool ec_cal_2_valid{false};
+point_t active_calib_point{point_t::DISBALED};
+
+bool calibration_valid()
+{
+    return ph_cal_1.valid && ph_cal_2.valid && ec_cal_1.valid && ec_cal_2.valid;
+}
 
 hw_timer_t *timer = nullptr;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
 void IRAM_ATTR onTimer() {
     portENTER_CRITICAL_ISR(&timerMux);
-
-    sensorProcess();
-
+    ecControl();
     portEXIT_CRITICAL_ISR(&timerMux);
 }
 
-void setupSensors()
+void ecSetup()
 {
     // adc
     analogReadResolution(12);
@@ -44,7 +46,7 @@ void setupSensors()
     // timer interrupt
     timer = timerBegin(0, 80, true); // timer 0, prescaler 80 → 1 µs tick (80MHz / 80 = 1MHz)
     timerAttachInterrupt(timer, &onTimer, true);  // interval in microseconds
-    timerAlarmWrite(timer, 1000, true); // 1000 µs = 1 kHz toggle rate
+    timerAlarmWrite(timer, 250, true); // 250 µs = 4 kHz toggle rate
 }
 
 // ===================== HELPERS =====================
@@ -55,16 +57,16 @@ float readVoltage(const pin_t& pin) {
 
 float readTemperature(const pin_t& pin, const temp_cfg_t& cfg)
 {
-    float v_adc = readVoltage(pin);
+    vTempMeasure = readVoltage(pin);
 
-    // web_log("temp_v=" + String(v_adc, 3));
+    // web_log("temp_v=" + String(vTempMeasure, 3));
 
-    if(v_adc <= 0.0f || v_adc >= VREF)
+    if(vTempMeasure <= 0.0f || vTempMeasure >= VREF)
         return 25.0f;
 
-    // NTC on top, fixed resistor to GND:
+    // NTC on bottom
     float r_measure =
-        cfg.r1_series * (VREF / v_adc - 1.0f);
+        cfg.r1_series * (vTempMeasure / (VREF - vTempMeasure));
 
     if(r_measure <= 0.0f)
         return 25.0f;
@@ -82,7 +84,6 @@ float readTemperature(const pin_t& pin, const temp_cfg_t& cfg)
 float applyEcTemperatureCompensation(float ec, float temp)
 {
     const float alpha = 0.02f; // typical EC temp coefficient (2% per °C)
-
     return ec / (1.0f + alpha * (temp - 25.0f));
 }
 
@@ -102,6 +103,7 @@ float linearCalibrate(float voltage, const cal_point_t& p1, const cal_point_t& p
 void setActiveCalibration(point_t point)
 {
     active_calib_point = point;
+    web_log("set calibratrion point " + String(static_cast<int>(point)));
 }
 
 void applyCalibration()
@@ -113,8 +115,8 @@ void applyCalibration()
             clearPhHistory();
             ph_cal_1.voltage = vPhFilter.get();
             ph_cal_1.temp = tempFilter.get();
-            ph_cal_1_valid = true;
-            savePhCalibration1();
+            ph_cal_1.valid = true;
+            saveCalibrationPh1();
             break;
         }
         case point_t::PH2:
@@ -122,8 +124,8 @@ void applyCalibration()
             clearPhHistory();
             ph_cal_2.voltage = vPhFilter.get();
             ph_cal_2.temp = tempFilter.get();
-            ph_cal_2_valid = true;
-            savePhCalibration2();
+            ph_cal_2.valid = true;
+            saveCalibrationPh2();
             break;
         }
         case point_t::EC1:
@@ -131,8 +133,8 @@ void applyCalibration()
             clearEcHistory();
             ec_cal_1.voltage = vEcFilter.get();
             ec_cal_1.temp = tempFilter.get();
-            ec_cal_1_valid = true;
-            saveEcCalibration1();
+            ec_cal_1.valid = true;
+            saveCalibrationEc1();
             break;
         }
         case point_t::EC2:
@@ -140,14 +142,11 @@ void applyCalibration()
             clearEcHistory();
             ec_cal_2.voltage = vEcFilter.get();
             ec_cal_2.temp = tempFilter.get();
-            ec_cal_2_valid = true;
-            saveEcCalibration2();
+            ec_cal_2.valid = true;
+            saveCalibrationEc2();
             break;
         }
     }
-
-    // reset active point
-    setActiveCalibration(point_t::COUNT);
 }
 
 void tempProcess()
@@ -158,7 +157,7 @@ void tempProcess()
 // ===================== SENSOR PROCESS =====================
 enum phase_t { OFF, CONTROL, READ };
 
-void sensorProcess() {
+void ecControl() {
 
     static bool polarity = false;
     static phase_t phase = CONTROL;
@@ -167,6 +166,7 @@ void sensorProcess() {
 
         case OFF:
         {  
+            ec_read = false;
             digitalWrite(gpioEc1.idx, false);
             digitalWrite(gpioEc2.idx, false);
             phase = CONTROL;
@@ -174,92 +174,91 @@ void sensorProcess() {
         }
         case CONTROL:
         {
-            read_sensors = false;
             polarity = !polarity;
             digitalWrite(gpioEc1.idx, !polarity);
             digitalWrite(gpioEc2.idx, polarity);
+            polarity ? ec_read = true : ec_read = false;
             phase = READ;
             break;
         }
         case READ:
         {
-            polarity ? read_sensors = true : read_sensors = false;
             phase = OFF;
             break;
         }
     }
 }
 
-void updateSensors()
+void ecRead()
 {
-    if (read_sensors)
+    if (ec_active && ec_read)
     {
-        auto ecRaw = readVoltage(adcEc);
-        auto phRaw = readVoltage(adcPh);
-        digitalWrite(gpioEc1.idx, false);
-        digitalWrite(gpioEc2.idx, false);
-
-        tempProcess();
-        vEcMeasure = vEcFilter.update(ecRaw);
-        vPhMeasure = vPhFilter.update(phRaw);
-
-        if (!ec_cal_1_valid || !ec_cal_2_valid)
-        {
-            vEcMeasure = 0.0f;
-            ecMeasure = 0.0f;
-        }
-        else
-        {
-            ecMeasure = linearCalibrate(vEcMeasure, ec_cal_1, ec_cal_2);
-            ecMeasure = applyEcTemperatureCompensation(ecMeasure, tempMeasure);
-        }
-
-        if (!ph_cal_1_valid || !ph_cal_2_valid)
-        {
-            vPhMeasure = 0.0f;
-            phMeasure = 0.0f;
-        }
-        else
-        {
-            phMeasure = linearCalibrate(vPhMeasure, ph_cal_1, ph_cal_2);
-
-            // 4. IMPORTANT:
-            // DO NOT apply EC temperature compensation to pH
-            // do Nernst Equation for temperature compensation
-            // (pH temperature compensation is different chemistry and not linear like EC)
-        }
-
-
-        // in case of calibration
-        if(active_calib_point != point_t::COUNT)
-        {
-            switch(active_calib_point)
-            {
-                case point_t::PH1:
-                case point_t::PH2:
-                {
-                    vPhFilter.update(vPhMeasure);
-                    break;
-                }
-                case point_t::EC1:
-                case point_t::EC2:
-                {
-                    vEcFilter.update(vEcMeasure);
-                    break;
-                }
-            }
-        }
-
-        read_sensors = false;
+        vEcMeasure = readVoltage(adcEc);
+        ec_read = false;
     }
 }
 
-void enableMeasurement()
+void ecProcess()
 {
-    timerAlarmEnable(timer);
+    if (ec_active)
+    {
+        vEcFilter.update(vEcMeasure);
+        
+        if (ec_cal_1.valid && ec_cal_2.valid)
+        {
+            ecMeasure = applyEcTemperatureCompensation(
+                    linearCalibrate(
+                        vEcFilter.get(), 
+                        ec_cal_1,
+                        ec_cal_2),
+                    tempMeasure);
+        }
+    }
 }
 
-void disableMeasurement()
+void phReadProcess()
 {
-    timerAlarmDisable(timer);
+    if (ph_active)
+    {
+        vPhMeasure = readVoltage(adcPh);
+        vPhFilter.update(vPhMeasure);
+
+        if (ph_cal_1.valid && ph_cal_2.valid)
+        {
+            phMeasure = linearCalibrate(
+                    vPhFilter.get(), 
+                    ph_cal_1,
+                    ph_cal_2);
+        }
+    }
+}
+
+void enableEc()
+{
+    if(!ec_active)
+    {
+        timerAlarmEnable(timer);
+        ec_active = true;
+    }
+}
+
+void disableEc()
+{
+    if(ec_active)
+    {
+        timerAlarmDisable(timer);
+        ec_active = false;
+    }
+    digitalWrite(gpioEc1.idx, false);
+    digitalWrite(gpioEc2.idx, false);
+}
+
+void enablePh()
+{
+    ph_active = true;
+}
+
+void disablePh()
+{
+    ph_active = false;
 }

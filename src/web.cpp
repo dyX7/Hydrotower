@@ -2,15 +2,15 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
-#include <Preferences.h>
 #include <ESPmDNS.h>
 #include <fsm.hpp>
 #include <time.h>
 #include <settings.hpp>
 #include <sensor.hpp>
+#include <Preferences.h>
 
-AsyncWebServer server(80);
 Preferences prefs;
+AsyncWebServer server(80);
 
 // ---------------- WiFi ----------------
 bool apMode = false;
@@ -83,7 +83,7 @@ void web_log(const String &msg)
   logIndex = (logIndex + 1) % LOG_SIZE;
 }
 
-void web_pumps(pumps_t pump, pump_dir dir)
+void web_pumps(pumps_t pump, pump_dir dir, float duty)
 {
   // get actual dir
   auto actualDir = pumps[static_cast<size_t>(pump)];
@@ -112,7 +112,7 @@ void web_pumps(pumps_t pump, pump_dir dir)
       case pump_dir::REVERSE: dirName = "REVERSE"; break;
     }
 
-    web_log(String("Pump ") + pumpName + " -> " + dirName);
+    web_log(pumpName + String(" ") + dirName + String(" duty=") + duty );
   }
 }
 
@@ -135,13 +135,75 @@ void web_add_data_hist(float ec_v, float ph_v, float temp)
     saveHistory();
   }
 
-  if (hist_index % 10 == 0)
-  {
-    // web_log(String("DATA SAMPLE idx=") + hist_index +
-    //         " ec=" + String(ec_v, 2) +
-    //         " ph=" + String(ph_v, 2) +
-    //         " t=" + String(temp, 2));
-  }
+  web_log(String("HIST idx=") + hist_index +
+          " ec=" + String(ec_v, 2) +
+          " ph=" + String(ph_v, 2) +
+          " t=" + String(temp, 2));
+  
+}
+
+void saveCalibrationPh1()
+{
+    prefs.begin("calibration", false);
+    prefs.putBool("ph1_valid", ph_cal_1.valid);
+    prefs.putFloat("ph1_value", ph_cal_1.value);
+    prefs.putFloat("ph1_temp", ph_cal_1.temp);
+    prefs.putFloat("ph1_voltage", ph_cal_1.voltage);
+    prefs.end();
+
+    web_log(
+        "PH1\n\tvalue=" + String(ph_cal_1.value, 2) +
+        "\n\ttemp=" + String(ph_cal_1.temp, 1) +
+        "\n\tvoltage=" + String(ph_cal_1.voltage, 3)
+    );
+}
+
+void saveCalibrationPh2()
+{
+    prefs.begin("calibration", false);
+    prefs.putBool("ph2_valid", ph_cal_2.valid);
+    prefs.putFloat("ph2_value", ph_cal_2.value);
+    prefs.putFloat("ph2_temp", ph_cal_2.temp);
+    prefs.putFloat("ph2_voltage", ph_cal_2.voltage);
+    prefs.end();
+
+    web_log(
+        "PH2\n\tvalue=" + String(ph_cal_2.value, 2) +
+        "\n\ttemp=" + String(ph_cal_2.temp, 1) +
+        "\n\tvoltage=" + String(ph_cal_2.voltage, 3)
+    );
+}
+
+void saveCalibrationEc1()
+{
+    prefs.begin("calibration", false);
+    prefs.putBool("ec1_valid", ec_cal_1.valid);
+    prefs.putFloat("ec1_value", ec_cal_1.value);
+    prefs.putFloat("ec1_temp", ec_cal_1.temp);
+    prefs.putFloat("ec1_voltage", ec_cal_1.voltage);
+    prefs.end();
+
+    web_log(
+        "EC1\n\tvalue=" + String(ec_cal_1.value, 2) +
+        "\n\ttemp=" + String(ec_cal_1.temp, 1) +
+        "\n\tvoltage=" + String(ec_cal_1.voltage, 3)
+    );
+}
+
+void saveCalibrationEc2()
+{
+    prefs.begin("calibration", false);
+    prefs.putBool("ec2_valid", ec_cal_2.valid);
+    prefs.putFloat("ec2_value", ec_cal_2.value);
+    prefs.putFloat("ec2_temp", ec_cal_2.temp);
+    prefs.putFloat("ec2_voltage", ec_cal_2.voltage);
+    prefs.end();
+
+    web_log(
+        "EC2\n\tvalue=" + String(ec_cal_2.value, 2) +
+        "\n\ttemp=" + String(ec_cal_2.temp, 1) +
+        "\n\tvoltage=" + String(ec_cal_2.voltage, 3)
+    );
 }
 
 void clearEcHistory()
@@ -596,8 +658,15 @@ button { padding:10px; margin:5px; }
 
   <div class="topRow2">
     <div><span id="tempControlValue">0</span> °C</div>
-    <div><span id="ecControlValue">0</span> mS/cm</div>
-    <div><span id="phControlValue">0</span> pH</div>
+    <div>
+      <span id="ecControlValue">0</span> mS/cm
+      <span id="ecControlCalStatus"></span>
+    </div>
+
+    <div>
+      <span id="phControlValue">0</span> pH
+      <span id="phControlCalStatus"></span>
+    </div>
   </div>
 
   <div class="tabBar">
@@ -891,13 +960,20 @@ button { padding:10px; margin:5px; }
       gap:10px;
     ">
 
-      <!-- ================= LOCK BUTTON ================= -->
+    <!-- ================= CALIBRATION UNLOCK BUTTONS ================= -->
+
+    <div style="
+      display:flex;
+      gap:10px;
+      width:260px;
+    ">
+
       <button
         class="stateBtn"
-        id="calibLockBtn"
-        onclick="toggleCalibLock()"
+        id="calibEcLockBtn"
+        onclick="toggleEcCalibLock()"
         style="
-          width:260px;
+          flex:1;
           height:40px;
           font-size:14px;
           background:#d9534f;
@@ -905,57 +981,26 @@ button { padding:10px; margin:5px; }
           border:none;
           border-radius:6px;
         ">
+        EC LOCKED
       </button>
 
-      <!-- ================= LIVE SENSOR VALUES ================= -->
-      <div style="
-        font-size:13px;
-        font-weight:bold;
-        text-align:center;
-        line-height:1.6;
-        background:#eef2f3;
-        padding:8px;
-        border-radius:8px;
-        width:260px;
-      ">
+      <button
+        class="stateBtn"
+        id="calibPhLockBtn"
+        onclick="togglePhCalibLock()"
+        style="
+          flex:1;
+          height:40px;
+          font-size:14px;
+          background:#d9534f;
+          color:white;
+          border:none;
+          border-radius:6px;
+        ">
+        PH LOCKED
+      </button>
 
-        <div>
-          TEMP: <span id="tempMeasure">0.0</span> °C
-        </div>
-
-        <div>
-          EC: <span id="ecVoltageLive">0.000</span> V
-        </div>
-
-        <div>
-          PH: <span id="phVoltageLive">0.000</span> V
-        </div>
-
-      </div>
-
-      <!-- ================= MINI LIVE GRAPHS ================= -->
-
-      <div style="
-        width:260px;
-        display:flex;
-        flex-direction:column;
-        gap:4px;
-      ">
-
-        <div style="height:55px;">
-          <canvas id="chartCalEC"></canvas>
-        </div>
-
-        <div style="height:55px;">
-          <canvas id="chartCalPH"></canvas>
-        </div>
-
-        <div style="height:55px;">
-          <canvas id="chartCalTEMP"></canvas>
-        </div>
-
-      </div>
-
+    </div>
 
       <!-- ================= CALIB ROWS ================= -->
       <div style="
@@ -966,18 +1011,27 @@ button { padding:10px; margin:5px; }
 
       <div class="timerRow compact">
 
-        <button id="calib_ec_p1"
-                class="calibBtn"
-                onclick="setState('/calibrate_ec_p1')">
-          EC1
-        </button>
+      <button id="calib_ec_p1"
+              class="calibBtn"
+              onclick="setState('/calibrate_ec_p1?value=' + encodeURIComponent(document.getElementById('ecCal1Value').value))">
+        EC1
+      </button>
 
-        <div style="font-size:11px; line-height:1.2; margin-left:6px;">
-          <div>
-            <span id="cal_ec_p1_v">--</span>
-            <span id="cal_ec_p1_temp">--</span>
-          </div>
+      <div style="font-size:11px; line-height:1.2; margin-left:6px; min-width:70px;">
+
+        <!-- shown while EC calibration is active -->
+        <div id="live_ec_p1" style="display:none;">
+          <span id="live_ec_voltage_p1">--</span> V<br>
+          <span id="live_ec_temp_p1">--</span> °C
         </div>
+
+        <!-- stored fixed calibration point -->
+        <div id="stored_ec_p1">
+          <span id="cal_ec_p1_v">--</span><br>
+          <span id="cal_ec_p1_temp">--</span>
+        </div>
+
+      </div>
 
         <input id="ecCal1Value"
               class="timerValue"
@@ -991,18 +1045,25 @@ button { padding:10px; margin:5px; }
 
       <div class="timerRow compact">
 
-        <button id="calib_ec_p2"
-                class="calibBtn"
-                onclick="setState('/calibrate_ec_p2')">
-          EC2
-        </button>
+      <button id="calib_ec_p2"
+              class="calibBtn"
+              onclick="setState('/calibrate_ec_p2?value=' + encodeURIComponent(document.getElementById('ecCal2Value').value))">
+        EC2
+      </button>
 
-        <div style="font-size:11px; line-height:1.2; margin-left:6px;">
-          <div>
-            <span id="cal_ec_p2_v">--</span>
-            <span id="cal_ec_p2_temp">--</span>
-          </div>
+      <div style="font-size:11px; line-height:1.2; margin-left:6px; min-width:70px;">
+
+        <div id="live_ec_p2" style="display:none;">
+          <span id="live_ec_voltage_p2">--</span> V<br>
+          <span id="live_ec_temp_p2">--</span> °C
         </div>
+
+        <div id="stored_ec_p2">
+          <span id="cal_ec_p2_v">--</span><br>
+          <span id="cal_ec_p2_temp">--</span>
+        </div>
+
+      </div>
 
         <input id="ecCal2Value"
               class="timerValue"
@@ -1018,15 +1079,22 @@ button { padding:10px; margin:5px; }
 
         <button id="calib_ph_p1"
                 class="calibBtn"
-                onclick="setState('/calibrate_ph_p1')">
-          PH1
+                onclick="setState('/calibrate_ph_p1?value=' + encodeURIComponent(document.getElementById('phCal1Value').value))">
+          pH1
         </button>
 
-        <div style="font-size:11px; line-height:1.2; margin-left:6px;">
-          <div>
-            <span id="cal_ph_p1_v">--</span>
+        <div style="font-size:11px; line-height:1.2; margin-left:6px; min-width:70px;">
+
+          <div id="live_ph_p1" style="display:none;">
+            <span id="live_ph_voltage_p1">--</span> V<br>
+            <span id="live_ph_temp_p1">--</span> °C
+          </div>
+
+          <div id="stored_ph_p1">
+            <span id="cal_ph_p1_v">--</span><br>
             <span id="cal_ph_p1_temp">--</span>
           </div>
+
         </div>
 
         <input id="phCal1Value"
@@ -1043,15 +1111,22 @@ button { padding:10px; margin:5px; }
 
         <button id="calib_ph_p2"
                 class="calibBtn"
-                onclick="setState('/calibrate_ph_p2')">
-          PH2
+                onclick="setState('/calibrate_ph_p2?value=' + encodeURIComponent(document.getElementById('phCal2Value').value))">
+          pH2
         </button>
 
-        <div style="font-size:11px; line-height:1.2; margin-left:6px;">
-          <div>
-            <span id="cal_ph_p2_v">--</span>
+        <div style="font-size:11px; line-height:1.2; margin-left:6px; min-width:70px;">
+
+          <div id="live_ph_p2" style="display:none;">
+            <span id="live_ph_voltage_p2">--</span> V<br>
+            <span id="live_ph_temp_p2">--</span> °C
+          </div>
+
+          <div id="stored_ph_p2">
+            <span id="cal_ph_p2_v">--</span><br>
             <span id="cal_ph_p2_temp">--</span>
           </div>
+
         </div>
 
         <input id="phCal2Value"
@@ -1065,6 +1140,22 @@ button { padding:10px; margin:5px; }
       </div>
 
       </div>
+
+      <!-- ================= MANUAL PUMP CONTROL ================= -->
+
+      <hr style="width:260px;margin:15px 0;">
+
+      <h3 style="margin:5px 0;">Manual Pump Control</h3>
+
+      <div id="pumpControls"
+           style="
+             display:flex;
+             flex-direction:column;
+             gap:8px;
+             width:340px;
+           ">
+      </div>
+
     </div>
   </div>
 </div>
@@ -1131,18 +1222,6 @@ function showTab(id)
     .querySelector(`.tabBtn[data-tab="${id}"]`)
     .classList.add('activeTab');
 
-  // ================= CALIB TAB TASK CONTROL =================
-
-  if(id === 'calib')
-  {
-    fetch('/start_measure');
-  }
-
-  if(previousTab === 'calib' && id !== 'calib')
-  {
-    fetch('/stop_measure');
-  }
-
   // ================= GRAPH RESIZE =================
 
   if(id === 'graph')
@@ -1163,71 +1242,158 @@ function showTab(id)
 
 function setState(route)
 {
-  if(route === '/calibrate_ec_p1')
-  {
-    const v = document.getElementById('ecCal1Value').value;
-    const t = document.getElementById('tempMeasure').innerText;
-    fetch(`/calibrate_ec_p1?value=${v}&temp=${t}`);
-    return;
-  }
-
-  if(route === '/calibrate_ec_p2')
-  {
-    const v = document.getElementById('ecCal2Value').value;
-    const t = document.getElementById('tempMeasure').innerText;
-    fetch(`/calibrate_ec_p2?value=${v}&temp=${t}`);
-    return;
-  }
-
-  if(route === '/calibrate_ph_p1')
-  {
-    const v = document.getElementById('phCal1Value').value;
-    const t = document.getElementById('tempMeasure').innerText;
-    fetch(`/calibrate_ph_p1?value=${v}&temp=${t}`);
-    return;
-  }
-
-  if(route === '/calibrate_ph_p2')
-  {
-    const v = document.getElementById('phCal2Value').value;
-    const t = document.getElementById('tempMeasure').innerText;
-    fetch(`/calibrate_ph_p2?value=${v}&temp=${t}`);
-    return;
-  }
-
   fetch(route.startsWith("/") ? route : "/" + route);
 }
 
-let calibEnabled = false;
 
-function toggleCalibLock()
+let ecCalibEnabled = false;
+let phCalibEnabled = false;
+
+function updateEcCalibLock()
 {
-  calibEnabled = !calibEnabled;
+  const enabled = ecCalibEnabled;
 
-  document.querySelectorAll('[id^="calib_"]').forEach(btn => {
-
-    if(btn.id !== 'calibLockBtn')
-    {
-      btn.disabled = !calibEnabled;
-
-      btn.style.opacity =
-        calibEnabled ? "1.0" : "0.4";
-    }
+  document.querySelectorAll(
+    '#calib_ec_p1, #calib_ec_p2'
+  ).forEach(btn => {
+    btn.disabled = !enabled;
+    btn.style.opacity = enabled ? "1.0" : "0.4";
   });
 
-  let lockBtn = document.getElementById('calibLockBtn');
+  ['ec_p1', 'ec_p2'].forEach(id => {
 
-  if(calibEnabled)
+    document.getElementById('live_' + id).style.display =
+      enabled ? 'block' : 'none';
+
+    document.getElementById('stored_' + id).style.display =
+      enabled ? 'none' : 'block';
+  });
+
+  const lockBtn =
+    document.getElementById('calibEcLockBtn');
+
+  if(enabled)
   {
-    lockBtn.innerHTML = "CALIBRATION ENABLED";
+    lockBtn.innerHTML = "EC ENABLED";
     lockBtn.style.background = "#4CAF50";
   }
   else
   {
-    lockBtn.innerHTML = "CALIBRATION LOCKED";
+    lockBtn.innerHTML = "EC LOCKED";
     lockBtn.style.background = "#d9534f";
   }
 }
+
+function updatePhCalibLock()
+{
+  const enabled = phCalibEnabled;
+
+  document.querySelectorAll(
+    '#calib_ph_p1, #calib_ph_p2'
+  ).forEach(btn => {
+    btn.disabled = !enabled;
+    btn.style.opacity = enabled ? "1.0" : "0.4";
+  });
+
+  ['ph_p1', 'ph_p2'].forEach(id => {
+
+    document.getElementById('live_' + id).style.display =
+      enabled ? 'block' : 'none';
+
+    document.getElementById('stored_' + id).style.display =
+      enabled ? 'none' : 'block';
+  });
+
+  const lockBtn =
+    document.getElementById('calibPhLockBtn');
+
+  if(enabled)
+  {
+    lockBtn.innerHTML = "PH ENABLED";
+    lockBtn.style.background = "#4CAF50";
+  }
+  else
+  {
+    lockBtn.innerHTML = "PH LOCKED";
+    lockBtn.style.background = "#d9534f";
+  }
+}
+
+function toggleEcCalibLock()
+{
+  ecCalibEnabled = !ecCalibEnabled;
+
+  if(ecCalibEnabled)
+  {
+    // Disable PH calibration first
+    if(phCalibEnabled)
+    {
+      phCalibEnabled = false;
+      fetch('/stop_measure_ph');
+      updatePhCalibLock();
+    }
+
+    // Start EC measurement
+    fetch('/start_measure_ec');
+  }
+  else
+  {
+    fetch('/stop_measure_ec');
+  }
+
+  updateEcCalibLock();
+}
+
+
+function togglePhCalibLock()
+{
+  phCalibEnabled = !phCalibEnabled;
+
+  if(phCalibEnabled)
+  {
+    // Disable EC calibration first
+    if(ecCalibEnabled)
+    {
+      ecCalibEnabled = false;
+      fetch('/stop_measure_ec');
+      updateEcCalibLock();
+    }
+
+    // Start PH measurement
+    fetch('/start_measure_ph');
+  }
+  else
+  {
+    fetch('/stop_measure_ph');
+  }
+
+  updatePhCalibLock();
+}
+
+function setEcCal1Value() {
+    ec_cal_1.value = Number(
+        document.getElementById('ecCal1Value').value
+    );
+}
+
+function setEcCal2Value() {
+    ec_cal_2.value = Number(
+        document.getElementById('ecCal2Value').value
+    );
+}
+
+function setPhCal1Value() {
+    ph_cal_1.value = Number(
+        document.getElementById('phCal1Value').value
+    );
+}
+
+function setPhCal2Value() {
+    ph_cal_2.value = Number(
+        document.getElementById('phCal2Value').value
+    );
+}
+
 
 function createMiniChart(id, label, color, min, max)
 {
@@ -1286,14 +1452,45 @@ function createMiniChart(id, label, color, min, max)
   });
 }
 
-const chartCalEC =
-  createMiniChart("chartCalEC", "EC", "#2196F3", 0, 3);
+const pumpList = [
+  {name:"MAIN", route:"MAIN_PUMP", reverse:false},
+  {name:"FERT A", route:"FERTILIZER_A", reverse:true},
+  {name:"FERT B", route:"FERTILIZER_B", reverse:true},
+  {name:"PH+", route:"PH_PLUS", reverse:true},
+  {name:"PH-", route:"PH_MINUS", reverse:true}
+];
 
-const chartCalPH =
-  createMiniChart("chartCalPH", "PH", "#4CAF50", 4, 9);
+function createPumpControls()
+{
+    const root = document.getElementById("pumpControls");
 
-const chartCalTEMP =
-  createMiniChart("chartCalTEMP", "TEMP", "#FF9800", 10, 35);
+    pumpList.forEach(p=>{
+
+        let row=document.createElement("div");
+
+        row.style.display="grid";
+        row.style.gridTemplateColumns=p.reverse?
+            "70px 70px 70px 70px":
+            "70px 70px 70px";
+
+        row.style.gap="5px";
+
+        row.innerHTML=
+        `<div style="font-weight:bold;align-self:center;">${p.name}</div>
+         <button onclick="pumpCmd('${p.route}','pump')">PUMP</button>
+         <button onclick="pumpCmd('${p.route}','stop')">STOP</button>`+
+        (p.reverse?
+        `<button onclick="pumpCmd('${p.route}','reverse')">REV</button>`
+        :"");
+
+        root.appendChild(row);
+    });
+}
+
+function pumpCmd(pump, dir)
+{
+    fetch(`/pump?motor=${pump}&dir=${dir}`);
+}
 
 function toggle(url, btnId)
 {
@@ -1736,78 +1933,105 @@ async function update()
     }
 
     document.getElementById('ecControlValue').innerText =
-      (d.ec != null ? d.ec : 0);
+        Number(d.ec || 0).toFixed(2);
+
+    document.getElementById('ecControlCalStatus').innerText =
+        (d.calib?.ec_p1?.valid && d.calib?.ec_p2?.valid)
+          ? ''
+          : ' (not calibrated)';
 
     document.getElementById('phControlValue').innerText =
-      (d.ph != null ? d.ph : 0);
+        Number(d.ph || 0).toFixed(2);
+
+    document.getElementById('phControlCalStatus').innerText =
+        (d.calib?.ph_p1?.valid && d.calib?.ph_p2?.valid)
+          ? ''
+          : ' (not calibrated)';
 
     document.getElementById('tempControlValue').innerText =
       (d.temp != null ? d.temp : 0);
 
-    // ================= CALIBRATION =================
+    // ================= CALIBRATION LIVE VALUES =================
 
-      document.getElementById('ecVoltageLive').innerText =
-        Number(d.vEcMeasure || 0).toFixed(3);
+    const ecVoltage =
+      Number(d.vEcMeasure || 0).toFixed(3);
 
-      document.getElementById('phVoltageLive').innerText =
-        Number(d.vPhMeasure || 0).toFixed(3);
+    const phVoltage =
+      Number(d.vPhMeasure || 0).toFixed(3);
 
-      document.getElementById('tempMeasure').innerText =
-        Number(d.tempMeasure || 0).toFixed(1);
+    const calibrationTemp =
+      Number(d.tempMeasure || 0).toFixed(1);
 
-      if(d.calib)
-      {
-        document.getElementById('cal_ec_p1_v').innerText =
-          Number(d.calib.ec_p1.voltage).toFixed(3) + " V";
 
-        document.getElementById('cal_ec_p1_temp').innerText =
-          Number(d.calib.ec_p1.temp).toFixed(1) + " °C";
+    // ================= EC LIVE VALUES =================
 
-        document.getElementById('cal_ec_p2_v').innerText =
-          Number(d.calib.ec_p2.voltage).toFixed(3) + " V";
+    document.getElementById('live_ec_voltage_p1').innerText =
+      ecVoltage;
 
-        document.getElementById('cal_ec_p2_temp').innerText =
-          Number(d.calib.ec_p2.temp).toFixed(1) + " °C";
+    document.getElementById('live_ec_temp_p1').innerText =
+      calibrationTemp;
 
-        document.getElementById('cal_ph_p1_v').innerText =
-          Number(d.calib.ph_p1.voltage).toFixed(3) + " V";
-          
-        document.getElementById('cal_ph_p1_temp').innerText =
-          Number(d.calib.ph_p1.temp).toFixed(1) + " °C";
+    document.getElementById('live_ec_voltage_p2').innerText =
+      ecVoltage;
 
-        document.getElementById('cal_ph_p2_v').innerText =
-          Number(d.calib.ph_p2.voltage).toFixed(3) + " V";
+    document.getElementById('live_ec_temp_p2').innerText =
+      calibrationTemp;
 
-        document.getElementById('cal_ph_p2_temp').innerText =
-          Number(d.calib.ph_p2.temp).toFixed(1) + " °C";
-      }
 
-      calEcHist.push(Number(d.ec || 0));
-      calPhHist.push(Number(d.ph || 0));
-      calTempHist.push(Number(d.temp || 0));
+    // ================= PH LIVE VALUES =================
 
-      if(calEcHist.length > CAL_POINTS)
-      {
-        calEcHist.shift();
-        calPhHist.shift();
-        calTempHist.shift();
-      }
+    document.getElementById('live_ph_voltage_p1').innerText =
+      phVoltage;
 
-      const labels =
-        calEcHist.map((_, i) => i);
+    document.getElementById('live_ph_temp_p1').innerText =
+      calibrationTemp;
 
-      chartCalEC.data.labels = labels;
-      chartCalEC.data.datasets[0].data = calEcHist;
+    document.getElementById('live_ph_voltage_p2').innerText =
+      phVoltage;
 
-      chartCalPH.data.labels = labels;
-      chartCalPH.data.datasets[0].data = calPhHist;
+    document.getElementById('live_ph_temp_p2').innerText =
+      calibrationTemp;
 
-      chartCalTEMP.data.labels = labels;
-      chartCalTEMP.data.datasets[0].data = calTempHist;
+    if(d.calib)
+    {
+      document.getElementById('cal_ec_p1_v').innerText =
+        Number(d.calib.ec_p1.voltage).toFixed(3) + " V";
 
-      chartCalEC.update('none');
-      chartCalPH.update('none');
-      chartCalTEMP.update('none');
+      document.getElementById('cal_ec_p1_temp').innerText =
+        Number(d.calib.ec_p1.temp).toFixed(1) + " °C";
+
+      document.getElementById('cal_ec_p2_v').innerText =
+        Number(d.calib.ec_p2.voltage).toFixed(3) + " V";
+
+      document.getElementById('cal_ec_p2_temp').innerText =
+        Number(d.calib.ec_p2.temp).toFixed(1) + " °C";
+
+      document.getElementById('cal_ph_p1_v').innerText =
+        Number(d.calib.ph_p1.voltage).toFixed(3) + " V";
+        
+      document.getElementById('cal_ph_p1_temp').innerText =
+        Number(d.calib.ph_p1.temp).toFixed(1) + " °C";
+
+      document.getElementById('cal_ph_p2_v').innerText =
+        Number(d.calib.ph_p2.voltage).toFixed(3) + " V";
+
+      document.getElementById('cal_ph_p2_temp').innerText =
+        Number(d.calib.ph_p2.temp).toFixed(1) + " °C";
+    }
+
+    calEcHist.push(Number(d.ec || 0));
+    calPhHist.push(Number(d.ph || 0));
+    calTempHist.push(Number(d.temp || 0));
+
+    if(calEcHist.length > CAL_POINTS)
+    {
+      calEcHist.shift();
+      calPhHist.shift();
+      calTempHist.shift();
+    }
+
+    const labels =
+      calEcHist.map((_, i) => i);
 
     // ================= CHARTS =================
 
@@ -1907,8 +2131,8 @@ async function updateLog(){
   document.getElementById('log').innerText = await r.text();
 }
 
-setInterval(update, 200);
-setInterval(updateLog, 500);
+setInterval(update, 500);
+setInterval(updateLog, 1000);
 
 update();
 updateLog();
@@ -1928,9 +2152,11 @@ updateLog();
 
 showTab('main');
 
+createPumpControls();
+
 // calibration starts LOCKED
-toggleCalibLock();
-toggleCalibLock();
+updateEcCalibLock();
+updatePhCalibLock();
 
 </script>
 
@@ -1942,11 +2168,29 @@ toggleCalibLock();
 // ==================================================
 // WIFI + AP MODE
 // ==================================================
+
+bool startMDNS()
+{
+    if (MDNS.begin("hydrotower1"))
+    {
+        MDNS.addService("http", "tcp", 80);
+        Serial.println("mDNS started");
+        return true;
+    }
+    return false;
+}
+
 void startAP()
 {
   apMode = true;
+
   WiFi.mode(WIFI_AP);
   WiFi.softAP("ESP32-Setup");
+
+  IPAddress ip = WiFi.softAPIP();
+  Serial.println(ip);
+
+  startMDNS();
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *req)
   {
@@ -2035,11 +2279,8 @@ void connectWiFi()
   if(WiFi.status() == WL_CONNECTED)
   {
     Serial.println(WiFi.localIP());
-
-    if(MDNS.begin("hydrotower1"))
-    {
-      MDNS.addService("http", "tcp", 80);
-    }
+  
+    startMDNS();
 
     configTime(3600, 3600, "pool.ntp.org", "time.nist.gov");
   }
@@ -2068,6 +2309,7 @@ String buildJson()
   json += "\"phTol\":" + String(ph_tolerance, 2) + ",";
   json += "\"temp\":" + String(tempMeasure, 2) + ",";
   json += "\"tempMeasure\":" + String(tempMeasure, 2) + ",";
+  json += "\"vTempMeasure\":" + String(vTempMeasure, 3) + ",";
   json += "\"vEcMeasure\":" + String(vEcMeasure, 3) + ",";
   json += "\"vPhMeasure\":" + String(vPhMeasure, 3) + ",";
 
@@ -2084,21 +2326,25 @@ String buildJson()
   json += "\"ecReg\":" + String(ec_regulator, 2) + ",";
   json += "\"phReg\":" + String(ph_regulator, 2) + ",";
 
-  
+
   json += "\"calib\":{";
   json += "\"ec_p1\":{";
+  json += "\"valid\":" + String(ec_cal_1.valid ? "true" : "false") + ",";
   json += "\"value\":" + String(ec_cal_1.value, 2) + ",";
   json += "\"temp\":" + String(ec_cal_1.temp, 2) + ",";
   json += "\"voltage\":" + String(ec_cal_1.voltage, 3) + "},";
   json += "\"ec_p2\":{";
+  json += "\"valid\":" + String(ec_cal_2.valid ? "true" : "false") + ",";
   json += "\"value\":" + String(ec_cal_2.value, 2) + ",";
   json += "\"temp\":" + String(ec_cal_2.temp, 2) + ",";
   json += "\"voltage\":" + String(ec_cal_2.voltage, 3) + "},";
   json += "\"ph_p1\":{";
+  json += "\"valid\":" + String(ph_cal_1.valid ? "true" : "false") + ",";
   json += "\"value\":" + String(ph_cal_1.value, 2) + ",";
   json += "\"temp\":" + String(ph_cal_1.temp, 2) + ",";
   json += "\"voltage\":" + String(ph_cal_1.voltage, 3) + "},";
   json += "\"ph_p2\":{";
+  json += "\"valid\":" + String(ph_cal_2.valid ? "true" : "false") + ",";
   json += "\"value\":" + String(ph_cal_2.value, 2) + ",";
   json += "\"temp\":" + String(ph_cal_2.temp, 2) + ",";
   json += "\"voltage\":" + String(ph_cal_2.voltage, 3) + "}";
@@ -2189,73 +2435,6 @@ String buildJson()
   return json;
 }
 
-// ==================================================
-// CALIBRATION SAVE
-// ==================================================
-void saveEcCalibration1()
-{
-  prefs.begin("calibration", false);
-  prefs.putBool("ec_valid_1", ec_cal_1_valid);
-  prefs.putFloat("ec1_value", ec_cal_1.value);
-  prefs.putFloat("ec1_temp", ec_cal_1.temp);
-  prefs.putFloat("ec1_voltage", ec_cal_1.voltage);
-  prefs.end();
-
-  web_log(
-    "EC CAL P1\n\tvalue=" + String(ec_cal_1.value, 2) +
-    "\n\ttemp=" + String(ec_cal_1.temp, 1) +
-    "\n\tvoltage=" + String(ec_cal_1.voltage, 3)
-  );
-}
-
-void saveEcCalibration2()
-{
-  prefs.begin("calibration", false);
-  prefs.putBool("ec_valid_2", ec_cal_2_valid);
-  prefs.putFloat("ec2_value", ec_cal_2.value);
-  prefs.putFloat("ec2_temp", ec_cal_2.temp);
-  prefs.putFloat("ec2_voltage", ec_cal_2.voltage);
-  prefs.end();
-
-  web_log(
-    "EC CAL P2\n\tvalue=" + String(ec_cal_2.value, 2) +
-    "\n\ttemp=" + String(ec_cal_2.temp, 1) +
-    "\n\tvoltage=" + String(ec_cal_2.voltage, 3)
-  );
-}
-
-void savePhCalibration1()
-{
-  prefs.begin("calibration", false);
-  prefs.putBool("ph_valid_1", ph_cal_1_valid);
-  prefs.putFloat("ph1_value", ph_cal_1.value);
-  prefs.putFloat("ph1_temp", ph_cal_1.temp);
-  prefs.putFloat("ph1_voltage", ph_cal_1.voltage);
-  prefs.end();
-
-  web_log(
-    "PH CAL P1\n\tvalue=" + String(ph_cal_1.value, 2) +
-    "\n\ttemp=" + String(ph_cal_1.temp, 1) +
-    "\n\tvoltage=" + String(ph_cal_1.voltage, 3)
-  );
-}
-
-void savePhCalibration2()
-{
-  prefs.begin("calibration", false);
-  prefs.putBool("ph_valid_2", ph_cal_2_valid);
-  prefs.putFloat("ph2_value", ph_cal_2.value);
-  prefs.putFloat("ph2_temp", ph_cal_2.temp);
-  prefs.putFloat("ph2_voltage", ph_cal_2.voltage);
-  prefs.end();
-
-  web_log(
-    "PH CAL P2\n\tvalue=" + String(ph_cal_2.value, 2) +
-    "\n\ttemp=" + String(ph_cal_2.temp, 1) +
-    "\n\tvoltage=" + String(ph_cal_2.voltage, 3)
-  );
-}
-
 
 // ==================================================
 // CALIBRATION LOAD
@@ -2265,8 +2444,8 @@ void loadCalibration()
   prefs.begin("calibration", true);
 
   // ---------- EC ----------
-  ec_cal_1_valid = prefs.getBool("ec_valid_1", false);
-  ec_cal_2_valid = prefs.getBool("ec_valid_2", false);
+  ec_cal_1.valid = prefs.getBool("ec1_valid", false);
+  ec_cal_2.valid = prefs.getBool("ec2_valid", false);
 
   ec_cal_1.value   = prefs.getFloat("ec1_value", 0);
   ec_cal_1.temp    = prefs.getFloat("ec1_temp", 25);
@@ -2277,8 +2456,8 @@ void loadCalibration()
   ec_cal_2.voltage = prefs.getFloat("ec2_voltage", 0);
 
   // ---------- PH ----------
-  ph_cal_1_valid = prefs.getBool("ph_valid_1", false);
-  ph_cal_2_valid = prefs.getBool("ph_valid_2", false);
+  ph_cal_1.valid = prefs.getBool("ph1_valid", false);
+  ph_cal_2.valid = prefs.getBool("ph2_valid", false);
 
   ph_cal_1.value   = prefs.getFloat("ph1_value", 0);
   ph_cal_1.temp    = prefs.getFloat("ph1_temp", 25);
@@ -2291,14 +2470,14 @@ void loadCalibration()
   prefs.end();
 
   // ---------- VALIDATION ----------
-  if(ec_cal_1_valid && ec_cal_2_valid)
+  if(ec_cal_1.valid && ec_cal_2.valid)
   {
       web_log(
         "Load EC calibration\n\tP1=" +
-        String(ec_cal_1.value, 2) +
-        "\n\tP2=" +
         String(ec_cal_2.value, 2) +
         "\n\tV1=" +
+        String(ec_cal_1.value, 2) +
+        "\n\tP2=" +
         String(ec_cal_1.voltage, 3) +
         "\n\tV2=" +
         String(ec_cal_2.voltage, 3)
@@ -2308,17 +2487,13 @@ void loadCalibration()
       web_log("EC calibration not found!");
   }
 
-  if(ph_cal_1_valid && ph_cal_2_valid)
+  if(ph_cal_1.valid && ph_cal_2.valid)
   {
       web_log(
-        "Load PH calibration\n\tP1=" +
-        String(ph_cal_1.value, 2) +
-        "\n\tP2=" +
-        String(ph_cal_2.value, 2) +
-        "\n\tV1=" +
-        String(ph_cal_1.voltage, 3) +
-        "\n\tV2=" +
-        String(ph_cal_2.voltage, 3)
+        "Load PH calibration\n\tP1=" + String(ph_cal_1.value, 2) +
+        "\tV1=" + String(ph_cal_1.voltage, 3) +
+        "\n\tP2=" + String(ph_cal_2.value, 2) +
+        "\tV2=" + String(ph_cal_2.voltage, 3)
       );
   }
   else{
@@ -2339,60 +2514,64 @@ void setupRoutes()
     req->send(200, "text/html", index_html);
   });
 
+  // build data object for the web page
+
   server.on("/data", HTTP_GET, [](AsyncWebServerRequest *req)
   {
     req->send(200, "application/json", buildJson());
   });
 
-  server.on("/calibrate_ec_p1", HTTP_GET, [](AsyncWebServerRequest *req)
+  // start calibrations
+
+  server.on("/calibrate_ec_p1", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-    if(req->hasParam("value") && req->hasParam("temp"))
-    {
-      ec_cal_1.value = req->getParam("value")->value().toFloat();
-      ec_cal_1.temp  = req->getParam("temp")->value().toFloat();
-    }
-    setCommand(CMD_CALIBRATE_EC1, "CALIBRATE EC1");
-    
-    req->send(200, "text/plain", "OK");
+      if (request->hasParam("value"))
+      {
+          float value = request->getParam("value")->value().toFloat();
+          ec_cal_1.value = value;
+      }
+
+      setCommand(CMD_CALIBRATE_EC1, "CALIBRATE EC P1");
+
+      request->send(200, "text/plain", "OK");
   });
 
-  server.on("/calibrate_ec_p2", HTTP_GET, [](AsyncWebServerRequest *req)
+  server.on("/calibrate_ec_p2", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-    if(req->hasParam("value") && req->hasParam("temp"))
-    {
-      ec_cal_2.value = req->getParam("value")->value().toFloat();
-      ec_cal_2.temp = req->getParam("temp")->value().toFloat();
+      if (request->hasParam("value"))
+      {
+          float value = request->getParam("value")->value().toFloat();
+          ec_cal_2.value = value;
+      }
 
-    }
-    setCommand(CMD_CALIBRATE_EC2, "CALIBRATE EC2");
-
-    req->send(200, "text/plain", "OK");
+      setCommand(CMD_CALIBRATE_EC2, "CALIBRATE EC P2");
+      request->send(200, "text/plain", "OK");
   });
 
-  server.on("/calibrate_ph_p1", HTTP_GET, [](AsyncWebServerRequest *req)
+  server.on("/calibrate_ph_p1", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-    if(req->hasParam("value") && req->hasParam("temp"))
-    {
-      ph_cal_1.value = req->getParam("value")->value().toFloat();
-      ph_cal_1.temp = req->getParam("temp")->value().toFloat();
-    }
-    setCommand(CMD_CALIBRATE_PH1, "CALIBRATE PH1");
+      if (request->hasParam("value"))
+      {
+          float value = request->getParam("value")->value().toFloat();
+          ph_cal_1.value = value;
+      }
 
-    req->send(200, "text/plain", "OK");
-
+      setCommand(CMD_CALIBRATE_PH1, "CALIBRATE PH P1");
+      request->send(200, "text/plain", "OK");
   });
 
-  server.on("/calibrate_ph_p2", HTTP_GET, [](AsyncWebServerRequest *req)
+  server.on("/calibrate_ph_p2", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-    if(req->hasParam("value") && req->hasParam("temp"))
-    {
-      ph_cal_2.value = req->getParam("value")->value().toFloat();
-      ph_cal_2.temp = req->getParam("temp")->value().toFloat();
-    }
-    setCommand(CMD_CALIBRATE_PH2, "CALIBRATE PH2");
-    
-    req->send(200, "text/plain", "OK");
+      if (request->hasParam("value"))
+      {
+          float value = request->getParam("value")->value().toFloat();
+          ph_cal_2.value = value;
+      }
+
+      setCommand(CMD_CALIBRATE_PH2, "CALIBRATE PH P2");
+      request->send(200, "text/plain", "OK");
   });
+
 
   server.on("/log", HTTP_GET, [](AsyncWebServerRequest *req)
   {
@@ -2511,56 +2690,152 @@ void setupRoutes()
     req->send(200, "text/plain", "Saved");
   });
 
-  server.on("/start_measure", HTTP_GET, [](AsyncWebServerRequest *req)
+  server.on("/start_measure_ec", HTTP_GET,
+  [](AsyncWebServerRequest *req)
   {
-    enableMeasurement();
     setStopLock(true);
     fsm.transitionTo(&STATE_STOP);
-    req->send(200, "text/plain", "OK");
+
+    enableEc();
+    fsm.scheduler().startTask(sensor_proc_task);
+
+    req->send(200, "text/plain", "EC measurement started");
   });
 
-  server.on("/stop_measure", HTTP_GET, [](AsyncWebServerRequest *req)
+
+  server.on("/start_measure_ph", HTTP_GET,
+  [](AsyncWebServerRequest *req)
   {
-    disableMeasurement();
+    setStopLock(true);
+    fsm.transitionTo(&STATE_STOP);
+
+    enablePh();
+    fsm.scheduler().startTask(sensor_proc_task);
+
+    req->send(200, "text/plain", "PH measurement started");
+  });
+
+  server.on("/stop_measure_ec", HTTP_GET,
+  [](AsyncWebServerRequest *req)
+  {
+    disableEc();
+    fsm.scheduler().stopTask(sensor_proc_task);
+
     setStopLock(false);
-    fsm.transitionTo(&STATE_IDLE);
+
+    req->send(200, "text/plain", "EC measurement stopped");
+  });
+
+  server.on("/stop_measure_ph", HTTP_GET,
+  [](AsyncWebServerRequest *req)
+  {
+    disablePh();
+    fsm.scheduler().stopTask(sensor_proc_task);
+
+    setStopLock(false);
+
+    req->send(200, "text/plain", "PH measurement stopped");
+  });
+
+  server.on("/pump", HTTP_GET, [](AsyncWebServerRequest *req)
+  {
+    if(!req->hasParam("motor") || !req->hasParam("dir"))
+    {
+      req->send(400, "text/plain", "missing params");
+      return;
+    }
+
+    String motor = req->getParam("motor")->value();
+    String dir   = req->getParam("dir")->value();
+
+    pumps_t pump;
+    pump_dir direction;
+
+    // ---- map motor string → enum ----
+    if(motor == "MAIN_PUMP") pump = pumps_t::MAIN_PUMP;
+    else if(motor == "PH_PLUS") pump = pumps_t::PH_PLUS;
+    else if(motor == "PH_MINUS") pump = pumps_t::PH_MINUS;
+    else if(motor == "FERTILIZER_A") pump = pumps_t::FERTILIZER_A;
+    else if(motor == "FERTILIZER_B") pump = pumps_t::FERTILIZER_B;
+    else
+    {
+      req->send(400, "text/plain", "bad motor");
+      return;
+    }
+
+    // ---- map dir string → enum ----
+    if(dir == "stop") direction = pump_dir::STOP;
+    else if(dir == "pump") direction = pump_dir::PUMP;
+    else if(dir == "reverse") direction = pump_dir::REVERSE;
+    else
+    {
+      req->send(400, "text/plain", "bad dir");
+      return;
+    }
+
+    setPump(pump, direction);
+
     req->send(200, "text/plain", "OK");
   });
 
-  server.on("/idle", HTTP_GET, [](AsyncWebServerRequest *req)
+  server.on("/idle", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-    setCommand(CMD_IDLE, "IDLE");
-    req->send(200, "text/plain", "OK");
+      if (fsm.current != &STATE_IDLE)
+      {
+          setCommand(CMD_IDLE, "IDLE");
+      }
+
+      request->send(200, "text/plain", "OK");
   });
 
-  server.on("/stop", HTTP_GET, [](AsyncWebServerRequest *req)
+  server.on("/stop", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-    setCommand(CMD_STOP, "STOP");
-    req->send(200, "text/plain", "OK");
+      if (fsm.current != &STATE_STOP)
+      {
+          setCommand(CMD_STOP, "STOP");
+      }
+
+      request->send(200, "text/plain", "OK");
   });
 
-  server.on("/water", HTTP_GET, [](AsyncWebServerRequest *req)
+  server.on("/water", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-    setCommand(CMD_WATER, "WATER");
-    req->send(200, "text/plain", "OK");
+      if (fsm.current != &STATE_WATERING)
+      {
+          setCommand(CMD_WATER, "WATER");
+      }
+
+      request->send(200, "text/plain", "OK");
   });
 
-  server.on("/measure", HTTP_GET, [](AsyncWebServerRequest *req)
+  server.on("/measure", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-    setCommand(CMD_MEASURE, "MEASURE");
-    req->send(200, "text/plain", "OK");
+      if (fsm.current != &STATE_MEASURE)
+      {
+          setCommand(CMD_MEASURE, "MEASURE");
+      }
+
+      request->send(200, "text/plain", "OK");
   });
 
-  server.on("/regulate", HTTP_GET, [](AsyncWebServerRequest *req)
+  server.on("/regulate", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-    setCommand(CMD_REGULATE, "REGULATE");
-    req->send(200, "text/plain", "OK");
+      if (fsm.current != &STATE_REGULATE)
+      {
+          setCommand(CMD_REGULATE, "REGULATE");
+      }
+
+      request->send(200, "text/plain", "OK");
   });
 
-  server.on("/flush", HTTP_GET, [](AsyncWebServerRequest *req)
+  server.on("/flush", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-    setCommand(CMD_FLUSH, "FLUSH");
-    req->send(200, "text/plain", "OK");
+      if (fsm.current != &STATE_FLUSH)
+      {
+          setCommand(CMD_FLUSH, "FLUSH");
+      }
+
+      request->send(200, "text/plain", "OK");
   });
 }
 

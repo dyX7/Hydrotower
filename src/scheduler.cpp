@@ -114,13 +114,8 @@ bool scheduler_t::startTask(task_t &task)
         tasks[i].active = true;
         tasks[i].lastRun = micros();
 
-        if (tasks[i].interval >= 1000000ULL) {
-          web_log(String("SCHED ▶ ") + task.name + " " + formatTime(tasks[i].interval));
-        } else {
-          // web_log(String("SCHED ▶ ") + task.name);
-        }
+        // web_log(String("SCHED ▶ ") + task.name + " " + formatTime(tasks[i].interval));
       }
-
       return true;
     }
   }

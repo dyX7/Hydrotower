@@ -43,10 +43,11 @@ extern const pin_t adcEcTemp;
 
 extern gpio_out_t gpioEcMeasure1;
 extern gpio_out_t gpioEcMeasure2;
-
 extern gpio_out_t gpioMainPump;
-extern gpio_out_t tankStatus;
-extern gpio_out_t enDevices;
+extern gpio_out_t gpioEnDevices;
+
+extern gpio_in_t gpioTankStatus;
+
 extern pwm_out_t pwmPHplusDose;
 extern pwm_out_t pwmPHplusRev;
 extern pwm_out_t pwmPHminusDose;
@@ -66,6 +67,7 @@ struct temp_cfg_t {
 };
 
 struct cal_point_t {
+  bool valid;
   float value;
   float voltage;
   float temp;
@@ -82,11 +84,6 @@ extern cal_point_t ph_cal_1;
 extern cal_point_t ph_cal_2;
 extern cal_point_t ec_cal_1;
 extern cal_point_t ec_cal_2;
-
-extern bool ph_cal_1_valid;
-extern bool ph_cal_2_valid;
-extern bool ec_cal_1_valid;
-extern bool ec_cal_2_valid;
 
 extern const temp_cfg_t ec_temp_cfg;
 // extern const temp_cfg_t ph_temp_cfg;

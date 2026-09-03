@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <settings.hpp>
+#include <sensor.hpp>
 
 void web_init();
 void web_loop();
@@ -10,12 +11,12 @@ void web_add_data_hist(float ec, float ph, float temp);
 extern void clearEcHistory();
 extern void clearPhHistory();
 void web_log(const String &msg);
-void web_pumps(pumps_t pump, pump_dir dir);
+void web_pumps(pumps_t pump, pump_dir dir, float duty);
 
-extern void savePhCalibration1();
-extern void savePhCalibration2();
-extern void saveEcCalibration1();
-extern void saveEcCalibration2();
+void saveCalibrationPh1();
+void saveCalibrationPh2();
+void saveCalibrationEc1();
+void saveCalibrationEc2();
 
 // shared command from web → main
 enum system_cmd_t {

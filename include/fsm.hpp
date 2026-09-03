@@ -7,7 +7,21 @@ class fsm_t;
 
 extern scheduler_t scheduler;
 
-extern task_t t3_measure_task;
+extern task_t t1_idle_task;
+extern task_t t21_watering_task;
+extern task_t t22_watering_delay;
+extern task_t t8_flush_task;
+extern task_t t9_flush_delay_task;
+extern task_t t10_reverse_task;
+extern task_t t3_measure_ec_task;
+extern task_t t3_measure_ph_task;
+extern task_t t4_calibrate_ec_task;
+extern task_t t5_calibrate_ph_task;
+extern task_t t45_fertilize_task;
+extern task_t t46_wait_task;
+extern task_t t67_ph_task;
+extern task_t second_task;
+extern task_t sensor_proc_task;
 
 extern int cycle_time_minutes;
 extern int watering_minutes;
@@ -22,6 +36,7 @@ extern float ec_tolerance;
 extern float ph_regulator;
 extern float ph_tolerance;
 
+extern bool sensor_process;
 extern bool stop_locked;
 extern void setStopLock(bool lock);
 
@@ -29,7 +44,6 @@ extern int sleep_start_hour;
 extern int sleep_start_minute;
 extern int sleep_end_hour;
 extern int sleep_end_minute;
-
 
 // ---------------- Base State ----------------
 
@@ -68,6 +82,7 @@ public:
   void setError() { error = true; }
   bool isSleepTime();
   void event1sec();
+  void setSensorProcess();
   scheduler_t &scheduler() { return _s; }
   const char* stateName() const;
 
@@ -148,11 +163,32 @@ public:
     void update(fsm_t &fsm) override;
 };
 
-class MeasureState : public State {
+// --------------------------------------------------
+// MEASURE SUB STATES
+// --------------------------------------------------
+
+class MeasureEcState : public State {
 public:
-  void enter(fsm_t &fsm);
-  void exit(fsm_t &fsm) override;
-  void update(fsm_t &fsm) override;
+    void enter(fsm_t &fsm) override;
+    void exit(fsm_t &fsm) override;
+    void update(fsm_t &fsm) override;
+};
+
+class MeasurePhState : public State {
+public:
+    void enter(fsm_t &fsm) override;
+    void exit(fsm_t &fsm) override;
+    void update(fsm_t &fsm) override;
+};
+
+class MeasureState : public CompositeState {
+public:
+    MeasureState(scheduler_t& s, State* activeState)
+        : CompositeState{s, activeState} {}
+
+    void enter(fsm_t &fsm) override;
+    void exit(fsm_t &fsm) override;
+    void update(fsm_t &fsm) override;
 };
 
 // --------------------------------------------------
@@ -240,11 +276,22 @@ public:
     void update(fsm_t &fsm) override;
 };
 
-class CalibrateState : public State {
+// --------------------------------------------------
+// CALIBRATION MAIN STATES
+// --------------------------------------------------
+
+class CalibrateEcState : public State {
 public:
-  void enter(fsm_t &fsm);
-  void exit(fsm_t &fsm) override;
-  void update(fsm_t &fsm) override;
+    void enter(fsm_t &fsm) override;
+    void exit(fsm_t &fsm) override;
+    void update(fsm_t &fsm) override;
+};
+
+class CalibratePhState : public State {
+public:
+    void enter(fsm_t &fsm) override;
+    void exit(fsm_t &fsm) override;
+    void update(fsm_t &fsm) override;
 };
 
 class StopState : public State {
@@ -263,13 +310,17 @@ void disableAllPumps();
 extern InitState STATE_INIT;
 extern StopState STATE_STOP;
 extern IdleState STATE_IDLE;
-extern CalibrateState STATE_CALIBRATE;
+
+extern CalibrateEcState STATE_CALIBRATE_EC;
+extern CalibratePhState STATE_CALIBRATE_PH;
 
 extern WateringPumpState STATE_WATERING_PUMP;
 extern WateringWaitState STATE_WATERING_WAIT;
 extern WateringState     STATE_WATERING;
 
-extern MeasureState STATE_MEASURE;
+extern MeasureEcState STATE_MEASURE_EC;
+extern MeasurePhState STATE_MEASURE_PH;
+extern MeasureState   STATE_MEASURE;
 
 extern Regulate1_FertilizerAState  STATE_REG1_FERT_A;
 extern Regulate2_WaitState         STATE_REG2_WAIT;

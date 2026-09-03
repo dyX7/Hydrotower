@@ -15,7 +15,7 @@ void setup()
 {
   Serial.begin(115200);
 
-  setupSensors();
+  ecSetup();
 
   web_init();
   fsm.begin(&STATE_INIT);
@@ -26,7 +26,15 @@ void setup()
 // ---------------- Loop ----------------
 void loop() 
 {
-  updateSensors();
+  ecRead();
+
+  if(sensor_process)
+  {
+    ecProcess();
+    phReadProcess();
+    sensor_process = false;
+  }
+
   fsm.poll();
   scheduler.poll();
   web_loop();
@@ -79,25 +87,25 @@ void loop()
     case CMD_CALIBRATE_EC1:
     {
       setActiveCalibration(point_t::EC1);
-      fsm.transitionTo(&STATE_CALIBRATE);
+      fsm.transitionTo(&STATE_CALIBRATE_EC);
       break;
     }
     case CMD_CALIBRATE_EC2:
     {
       setActiveCalibration(point_t::EC2);
-      fsm.transitionTo(&STATE_CALIBRATE);
+      fsm.transitionTo(&STATE_CALIBRATE_EC);
       break;
-    }
+    }   
     case CMD_CALIBRATE_PH1:
     {
       setActiveCalibration(point_t::PH1);
-      fsm.transitionTo(&STATE_CALIBRATE);
+      fsm.transitionTo(&STATE_CALIBRATE_PH);
       break;
     }
     case CMD_CALIBRATE_PH2:
     {
       setActiveCalibration(point_t::PH2);
-      fsm.transitionTo(&STATE_CALIBRATE);
+      fsm.transitionTo(&STATE_CALIBRATE_PH);
       break;
     }
   }

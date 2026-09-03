@@ -16,16 +16,53 @@ struct pin_t
 };
 
 // ==================================================
+// GPIO INPUT
+// ==================================================
+class gpio_in_t
+{
+public:
+
+  gpio_in_t(const pin_t &pin, uint8_t mode = INPUT, bool trace = false)
+  : p(pin), _trace(trace)
+  {
+    pinMode(p.idx, mode);
+  }
+
+  bool get() const
+  {
+    bool state = digitalRead(p.idx);
+
+    if (_trace)
+    {
+      Serial.print(_trace_id++);
+      Serial.print(" - ");
+      Serial.print(p.name);
+      Serial.println(state ? " ON" : " OFF");
+    }
+
+    return state;
+  }
+
+  const pin_t &p;
+
+private:
+  bool _trace;
+};
+
+// ==================================================
 // GPIO OUTPUT
 // ==================================================
 class gpio_out_t
 {
 public:
 
-  gpio_out_t(const pin_t &pin, bool trace=false)
+  gpio_out_t(const pin_t &pin,
+             bool default_state = false,
+             bool trace = false)
   : p(pin), _trace(trace)
   {
     pinMode(p.idx, OUTPUT);
+    set(default_state);
   }
 
   void set(bool state)
@@ -76,7 +113,7 @@ public:
   }
 
   // ==================================================
-  // ENABLE / DISABLE (TRUE = 50%, FALSE = 0%)
+  // ENABLE / DISABLE
   // ==================================================
   void set(bool enable)
   {
@@ -116,21 +153,6 @@ public:
     return _percent;
   }
 
-  // ==================================================
-  // DEFAULT DUTY (used when enabling)
-  // ==================================================
-  void setDefaultDuty(float duty)
-  {
-    _defaultDuty = constrain(duty, 0.0f, 1.0f);
-
-    if(_enabled)
-      setDuty(_defaultDuty);
-  }
-
-  float defaultDuty() const
-  {
-    return _defaultDuty;
-  }
 
   // ==================================================
   // FREQUENCY CONTROL
