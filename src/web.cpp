@@ -406,16 +406,16 @@ button { padding:10px; margin:5px; }
 }
 
 .stateBtn {
-  width: 120px;
-  height: 55px;
-  margin: 5px;
+  width: 90px;
+  height: 42px;
+  margin: 3px;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: bold;
-  border-radius: 8px;
+  border-radius: 7px;
 }
 
 .activeTab {
@@ -425,12 +425,11 @@ button { padding:10px; margin:5px; }
 
 .stateButtonGrid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(3, auto);
-  gap: 12px;
-
-  width: 320px;
-  justify-items: center;
+  grid-template-columns: repeat(3, 90px);
+  grid-template-rows: repeat(2, 42px);
+  gap: 6px;
+  width: fit-content;
+  justify-content: center;
   margin: 0 auto;
 }
 
@@ -478,25 +477,6 @@ button { padding:10px; margin:5px; }
   font-weight: 600;
   color: #333;
   margin-bottom: 2px;
-}
-
-.lamp {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-
-  background: #888;
-  box-shadow: inset 0 0 4px rgba(0,0,0,0.4);
-}
-
-.lamp.pump {
-  background: #4caf50;
-  box-shadow: 0 0 10px #4caf50;
-}
-
-.lamp.reverse {
-  background: #f44336;
-  box-shadow: 0 0 10px #f44336;
 }
 
 .lampWrap {
@@ -764,16 +744,71 @@ button { padding:10px; margin:5px; }
       <div class="stateButtonGrid">
         <button class="stateBtn" onclick="setState('/idle')">IDLE</button>
         <button class="stateBtn" onclick="setState('/stop')">STOP</button>
-        <button class="stateBtn" onclick="setState('/water')">WATER</button>
 
+        <button class="stateBtn" onclick="setState('/water')">WATER</button>
         <button class="stateBtn" onclick="setState('/measure')">MEASURE</button>
+
         <button class="stateBtn" onclick="setState('/regulate')">REGULATE</button>
         <button class="stateBtn" onclick="setState('/flush')">FLUSH</button>
       </div>
 
     </div>
 
+    <div style="
+      display:flex;
+      justify-content:center;
+      margin-top:8px;
+    ">
+
+      <button
+        class="stateBtn"
+        id="pumpLockBtn"
+        onclick="togglePumpLock()"
+        style="
+          width:160px;
+          height:40px;
+          font-size:12px;
+          background:#d9534f;
+          color:white;
+          border:none;
+          border-radius:6px;
+          margin:0;
+        ">
+        PUMPS LOCKED
+      </button>
+
+    </div>
+
   </div>
+
+  
+<!-- ================= MANUAL PUMP CONTROL ================= -->
+
+<div id="pumpControlSection"
+     style="
+       display:none;
+       flex-direction:column;
+       align-items:center;
+       gap:6px;
+     ">
+
+  <hr style="width:260px;margin:15px 0 8px;">
+
+  <h3 style="margin:5px 0;font-size:16px;">
+    Manual Pump Control
+  </h3>
+
+  <div id="pumpControls"
+       style="
+         display:flex;
+         flex-direction:column;
+         gap:4px;
+         width:300px;
+       ">
+  </div>
+
+</div>
+  
 
 </div>
 
@@ -1046,23 +1081,6 @@ button { padding:10px; margin:5px; }
     PH LOCKED
   </button>
 
-  <button
-    class="stateBtn"
-    id="pumpLockBtn"
-    onclick="togglePumpLock()"
-    style="
-      flex:1;
-      height:40px;
-      font-size:12px;
-      background:#d9534f;
-      color:white;
-      border:none;
-      border-radius:6px;
-      margin:0;
-    ">
-    PUMP LOCKED
-  </button>
-
 </div>
 
   <!-- ================================================= -->
@@ -1252,35 +1270,6 @@ button { padding:10px; margin:5px; }
   </div>
   <!-- END PH CALIBRATION SECTION -->
 
-
-<!-- ================= MANUAL PUMP CONTROL ================= -->
-
-<div id="pumpControlSection"
-     style="
-       display:none;
-       flex-direction:column;
-       align-items:center;
-       gap:6px;
-     ">
-
-  <hr style="width:260px;margin:15px 0 8px;">
-
-  <h3 style="margin:5px 0;font-size:16px;">
-    Manual Pump Control
-  </h3>
-
-  <div id="pumpControls"
-       style="
-         display:flex;
-         flex-direction:column;
-         gap:4px;
-         width:300px;
-       ">
-  </div>
-
-</div>
-
-
 <!-- ================= MONITOR TAB ================= -->
 
 <div id="monitor" class="tab">
@@ -1384,12 +1373,12 @@ function updatePumpLock()
     {
         if(pumpControlEnabled)
         {
-            lockBtn.innerHTML = 'PUMP ENABLED';
+            lockBtn.innerHTML = 'MANUAL CONTROL';
             lockBtn.style.background = '#4CAF50';
         }
         else
         {
-            lockBtn.innerHTML = 'PUMP LOCKED';
+            lockBtn.innerHTML = 'PUMPS LOCKED';
             lockBtn.style.background = '#d9534f';
         }
     }
