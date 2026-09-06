@@ -2,14 +2,14 @@
 
 // ------------ Status ----------------
 const pin_t waterLow {22, "WATER_LOW"};
-const pin_t deviceRelais {23, "EN_DEVICES"};
+const pin_t relais24VPeristalticPumps {13, "EN_DEVICES"};
 
 // ------------ EC / pH Control ----------------
 const pin_t gpioEc1 {32, "EC1"};
 const pin_t gpioEc2 {33, "EC2"};
 
 // ------------ Main Pump ----------------
-const pin_t gpioMot1 {21, "MOT_MAIN"};
+const pin_t relais24VMotor {21, "MOT_MAIN"};
 
 // ------------ pH+ Pump ----------------
 const pin_t pinPwmMot2Dose {25, "MOT_PH+_Dose"};
@@ -24,7 +24,7 @@ const pin_t pinPwmMot4Dose {19, "MOT_FERT_A_Dose"};
 const pin_t pinPwmMot4Rev  {18, "MOT_FERT_A_Rev"};
 
 // ------------ Fertilizer B ----------------
-const pin_t pinPwmMot5Dose {5, "MOT_FERT_B_Dose"};
+const pin_t pinPwmMot5Dose {16, "MOT_FERT_B_Dose"};
 const pin_t pinPwmMot5Rev  {17, "MOT_FERT_B_Rev"};
 
 // ------------ Analog Sensors ----------------
@@ -38,18 +38,18 @@ const pin_t gpio2  {2,  "GPIO2"};    // BOOT STRAP | ADC2_CH2 | AVOID
 const pin_t gpio4  {4,  "GPIO4"};    // BOOT STRAP | ADC2_CH0 | TOUCH0 | AVOID
 const pin_t gpio12 {12, "GPIO12"};   // BOOT STRAP | ADC2_CH5 | TOUCH5 | AVOID
 const pin_t gpio15 {15, "GPIO15"};   // BOOT STRAP | ADC2_CH3 | AVOID      
-const pin_t gpio14 {13, ""};         // GPIO14 | ADC2_CH6 | PWM | SAFE
-const pin_t gpio5  {16,  ""};
+const pin_t gpio13 {23, ""};         // GPIO23
+const pin_t gpio5  {5,  ""};
 
 
 // ---------------- GPIO ----------------
 gpio_in_t waterLevelLow{waterLow};
-gpio_out_t gpioEnDevices{deviceRelais};
+gpio_out_t gpioEnPumps{relais24VPeristalticPumps};
 
 gpio_out_t gpioEcMeasure1{gpioEc1};
 gpio_out_t gpioEcMeasure2{gpioEc2};
 
-gpio_out_t gpioMainPump{gpioMot1};
+gpio_out_t gpioMainPump{relais24VMotor};
 
 pwm_out_t pwmPHplusDose(pinPwmMot2Dose, 1,  MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
 pwm_out_t pwmPHplusRev(pinPwmMot2Rev, 2,    MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
@@ -65,7 +65,7 @@ pwm_out_t pwmFertilizerBRev(pinPwmMot5Rev, 8,   MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PE
 const float VREF = 3.3;
 const float TEMP0_K = 298.15;
 const uint32_t MOTOR_PWM_FREQ = 2000;
-const float MOTOR_DUTY_PERCENT = 0.7f;
+const float MOTOR_DUTY_PERCENT = 0.9f;
 
 
 // ---------------- Calibration Defaults ----------------

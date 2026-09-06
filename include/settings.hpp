@@ -44,7 +44,7 @@ extern const pin_t adcEcTemp;
 extern gpio_out_t gpioEcMeasure1;
 extern gpio_out_t gpioEcMeasure2;
 extern gpio_out_t gpioMainPump;
-extern gpio_out_t gpioEnDevices;
+extern gpio_out_t gpioEnPumps;
 
 extern gpio_in_t gpioTankStatus;
 

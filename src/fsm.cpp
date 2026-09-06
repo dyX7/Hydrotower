@@ -371,7 +371,7 @@ void StopState::enter(fsm_t &fsm) {
 
   remaining_seconds = 0;
   disableAllPumps();
-  gpioEnDevices.set(false);
+  gpioEnPumps.set(false);
 }
 
 void StopState::exit(fsm_t &fsm) {
@@ -389,7 +389,7 @@ void IdleState::enter(fsm_t &fsm) {
   s.startTask(t1_idle_task);
   disableEc();
   disableAllPumps();
-  gpioEnDevices.set(false);
+  gpioEnPumps.set(false);
 }
 
 void IdleState::exit(fsm_t &fsm) {
@@ -721,6 +721,9 @@ void MeasureState::update(fsm_t &fsm)
 void RegulateState::enter(fsm_t &fsm)
 {
     setPump(pumps_t::MAIN_PUMP, pump_dir::PUMP);
+    gpioEnPumps.set(true);
+
+    done = false;
 
     bool fert = fertilizerNeeded();
     bool phP  = phPlusNeeded();
@@ -744,6 +747,7 @@ void RegulateState::enter(fsm_t &fsm)
 void RegulateState::exit(fsm_t &fsm)
 {
     disableAllPumps();
+    gpioEnPumps.set(false);
 
     if (subFsm.current)
         subFsm.current->exit(subFsm);
@@ -1192,7 +1196,6 @@ void disableAllPumps()
 void setPump(pumps_t pump, pump_dir dir)
 {   
     float duty = 0.0f;
-    bool enPumpSupply = false;
 
     switch(pump)
     {
@@ -1223,14 +1226,12 @@ void setPump(pumps_t pump, pump_dir dir)
                 pwmPHplusRev.set(false);
                 pwmPHplusDose.set(true);
                 duty = pwmPHplusDose.getDuty();
-                enPumpSupply = true;
             }
             else
             {
                 pwmPHplusDose.set(false);
                 pwmPHplusRev.set(true);
                 duty = pwmPHplusRev.getDuty();
-                enPumpSupply = true;
             }
             break;
         }
@@ -1247,14 +1248,12 @@ void setPump(pumps_t pump, pump_dir dir)
                 pwmPHminusRev.set(false);
                 pwmPHminusDose.set(true);
                 duty = pwmPHminusDose.getDuty();
-                enPumpSupply = true;
             }
             else
             {
                 pwmPHminusDose.set(false);
                 pwmPHminusRev.set(true);
                 duty = pwmPHminusRev.getDuty();
-                enPumpSupply = true;
             }
             break;
         }
@@ -1271,14 +1270,12 @@ void setPump(pumps_t pump, pump_dir dir)
                 pwmFertilizerARev.set(false);
                 pwmFertilizerADose.set(true);
                 duty = pwmFertilizerADose.getDuty();
-                enPumpSupply = true;
             }
             else
             {
                 pwmFertilizerADose.set(false);
                 pwmFertilizerARev.set(true);
                 duty = pwmFertilizerARev.getDuty();
-                enPumpSupply = true;
             }
             break;
         }
@@ -1295,23 +1292,15 @@ void setPump(pumps_t pump, pump_dir dir)
                 pwmFertilizerBRev.set(false);
                 pwmFertilizerBDose.set(true);
                 duty = pwmFertilizerBDose.getDuty();
-                enPumpSupply = true;
             }
             else
             {
                 pwmFertilizerBDose.set(false);
                 pwmFertilizerBRev.set(true);
                 duty = pwmFertilizerBRev.getDuty();
-                enPumpSupply = true;
             }
             break;
         }
-    }
-
-    // disable later in IDLE
-    if(enPumpSupply)
-    {
-        gpioEnDevices.set(true);
     }
 
     web_pumps(pump, dir, duty);

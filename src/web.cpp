@@ -48,13 +48,13 @@ String logBuffer[LOG_SIZE];
 int logIndex = 0;
 
 // ---------------- HISTORY ----------------
-#define MAX_POINTS 200
+#define MAX_POINTS 1000
 float ec_hist[MAX_POINTS];
 float ph_hist[MAX_POINTS];
 float temp_hist[MAX_POINTS];
 int hist_index = 0;
 bool hist_full = false;
-void saveHistory();
+void saveHistory(bool log = true);
 void loadHistory();
 
 // ==================================================
@@ -213,7 +213,7 @@ void clearEcHistory()
         ec_hist[i] = 0.0f;
     }
 
-    saveHistory();
+    saveHistory(false);
 }
 
 void clearPhHistory()
@@ -223,13 +223,13 @@ void clearPhHistory()
         ph_hist[i] = 0.0f;
     }
 
-    saveHistory();
+    saveHistory(false);
 }
 
 // ==================================================
 // SAVE HISTORY
 // ==================================================
-void saveHistory()
+void saveHistory(bool log)
 {
   prefs.begin("history", false);
 
@@ -242,12 +242,15 @@ void saveHistory()
 
   prefs.end();
 
-  web_log(
-    "History saved\n\tpoints=" + String(MAX_POINTS) +
-    "\n\tec=" + String(ec_hist[0], 2) +
-    "\n\tph=" + String(ph_hist[0], 2) +
-    "\n\ttemp=" + String(temp_hist[0], 2)
-  );
+  if (log)
+  {
+    web_log(
+      "History saved\n\tpoints=" + String(MAX_POINTS) +
+      "\n\tec=" + String(ec_hist[0], 2) +
+      "\n\tph=" + String(ph_hist[0], 2) +
+      "\n\ttemp=" + String(temp_hist[0], 2)
+    );
+  }
 }
 
 // ==================================================
@@ -437,10 +440,44 @@ button { padding:10px; margin:5px; }
   align-items: center;
 
   width: 100%;
-  max-width: 700px;
+  margin: 2px 0 0 0;
+  padding: 2px 0;
+}
 
-  margin: 20px auto;
-  padding: 10px 0;
+.lamp {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+
+  background: #888;
+  box-shadow: inset 0 0 4px rgba(0,0,0,0.4);
+}
+
+.lamp.pump {
+  background: #4caf50;
+  box-shadow: 0 0 8px #4caf50;
+}
+
+.lamp.reverse {
+  background: #f44336;
+  box-shadow: 0 0 8px #f44336;
+}
+
+.lampWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  flex: 1;
+  min-width: 45px;
+}
+
+.lampLabel {
+  font-size: 10px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 2px;
 }
 
 .lamp {
@@ -656,18 +693,54 @@ button { padding:10px; margin:5px; }
     <div id="time">--</div>
   </div>
 
-  <div class="topRow2">
-    <div><span id="tempControlValue">0</span> °C</div>
-    <div>
-      <span id="ecControlValue">0</span> mS/cm
-      <span id="ecControlCalStatus"></span>
-    </div>
+<div class="topRow2">
 
-    <div>
-      <span id="phControlValue">0</span> pH
-      <span id="phControlCalStatus"></span>
-    </div>
+  <div>
+    <span id="tempControlValue">0</span> °C
   </div>
+
+  <div>
+    <span id="ecControlValue">0</span> mS/cm
+    <span id="ecControlCalStatus"></span>
+  </div>
+
+  <div>
+    <span id="phControlValue">0</span> pH
+    <span id="phControlCalStatus"></span>
+  </div>
+
+</div>
+
+<!-- ================= PUMP STATUS ================= -->
+
+<div class="pumpLamps">
+
+  <div class="lampWrap">
+    <div class="lampLabel">MAIN</div>
+    <div class="lamp" id="lamp0"></div>
+  </div>
+
+  <div class="lampWrap">
+    <div class="lampLabel">PH+</div>
+    <div class="lamp" id="lamp1"></div>
+  </div>
+
+  <div class="lampWrap">
+    <div class="lampLabel">PH-</div>
+    <div class="lamp" id="lamp2"></div>
+  </div>
+
+  <div class="lampWrap">
+    <div class="lampLabel">FERT A</div>
+    <div class="lamp" id="lamp3"></div>
+  </div>
+
+  <div class="lampWrap">
+    <div class="lampLabel">FERT B</div>
+    <div class="lamp" id="lamp4"></div>
+  </div>
+
+</div>
 
   <div class="tabBar">
     <button class="tabBtn" data-tab="main" onclick="showTab('main')">Control</button>
@@ -685,35 +758,6 @@ button { padding:10px; margin:5px; }
 <div id="main" class="tab" style="display:block;">
 
   <div class="dashboard">
-
-    <div class="pumpLamps">
-
-      <div class="lampWrap">
-        <div class="lampLabel">MAIN</div>
-        <div class="lamp" id="lamp0"></div>
-      </div>
-
-      <div class="lampWrap">
-        <div class="lampLabel">PH+</div>
-        <div class="lamp" id="lamp1"></div>
-      </div>
-
-      <div class="lampWrap">
-        <div class="lampLabel">PH-</div>
-        <div class="lamp" id="lamp2"></div>
-      </div>
-
-      <div class="lampWrap">
-        <div class="lampLabel">FERT A</div>
-        <div class="lamp" id="lamp3"></div>
-      </div>
-
-      <div class="lampWrap">
-        <div class="lampLabel">FERT B</div>
-        <div class="lamp" id="lamp4"></div>
-      </div>
-
-    </div>
 
     <div class="buttonGrid">
 
@@ -951,65 +995,90 @@ button { padding:10px; margin:5px; }
     box-sizing:border-box;
   ">
 
-    <div style="
-      width:fit-content;
-      max-width:100%;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      gap:10px;
+<div style="
+  width:fit-content;
+  max-width:100%;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:10px;
+">
+
+  <!-- ================= CALIBRATION ENABLE BUTTONS ================= -->
+
+<div style="
+  display:flex;
+  gap:6px;
+  width:330px;
+">
+
+  <button
+    class="stateBtn"
+    id="calibEcLockBtn"
+    onclick="toggleEcCalibLock()"
+    style="
+      flex:1;
+      height:40px;
+      font-size:12px;
+      background:#d9534f;
+      color:white;
+      border:none;
+      border-radius:6px;
+      margin:0;
     ">
+    EC LOCKED
+  </button>
 
-    <!-- ================= CALIBRATION UNLOCK BUTTONS ================= -->
-
-    <div style="
-      display:flex;
-      gap:10px;
-      width:260px;
+  <button
+    class="stateBtn"
+    id="calibPhLockBtn"
+    onclick="togglePhCalibLock()"
+    style="
+      flex:1;
+      height:40px;
+      font-size:12px;
+      background:#d9534f;
+      color:white;
+      border:none;
+      border-radius:6px;
+      margin:0;
     ">
+    PH LOCKED
+  </button>
 
-      <button
-        class="stateBtn"
-        id="calibEcLockBtn"
-        onclick="toggleEcCalibLock()"
-        style="
-          flex:1;
-          height:40px;
-          font-size:14px;
-          background:#d9534f;
-          color:white;
-          border:none;
-          border-radius:6px;
-        ">
-        EC LOCKED
-      </button>
+  <button
+    class="stateBtn"
+    id="pumpLockBtn"
+    onclick="togglePumpLock()"
+    style="
+      flex:1;
+      height:40px;
+      font-size:12px;
+      background:#d9534f;
+      color:white;
+      border:none;
+      border-radius:6px;
+      margin:0;
+    ">
+    PUMP LOCKED
+  </button>
 
-      <button
-        class="stateBtn"
-        id="calibPhLockBtn"
-        onclick="togglePhCalibLock()"
-        style="
-          flex:1;
-          height:40px;
-          font-size:14px;
-          background:#d9534f;
-          color:white;
-          border:none;
-          border-radius:6px;
-        ">
-        PH LOCKED
-      </button>
+</div>
 
-    </div>
+  <!-- ================================================= -->
+  <!-- EC CALIBRATION SECTION - HIDDEN INITIALLY -->
+  <!-- ================================================= -->
 
-      <!-- ================= CALIB ROWS ================= -->
-      <div style="
-        display:flex;
-        flex-direction:column;
-        gap:6px;
-      ">
+  <div id="ecCalibSection"
+       style="
+         display:none;
+         flex-direction:column;
+         gap:6px;
+       ">
 
-      <div class="timerRow compact">
+    <!-- EC1 -->
+
+    <div class="timerRow compact">
 
       <button id="calib_ec_p1"
               class="calibBtn"
@@ -1017,15 +1086,18 @@ button { padding:10px; margin:5px; }
         EC1
       </button>
 
-      <div style="font-size:11px; line-height:1.2; margin-left:6px; min-width:70px;">
+      <div style="
+        font-size:11px;
+        line-height:1.2;
+        margin-left:6px;
+        min-width:70px;
+      ">
 
-        <!-- shown while EC calibration is active -->
         <div id="live_ec_p1" style="display:none;">
           <span id="live_ec_voltage_p1">--</span> V<br>
           <span id="live_ec_temp_p1">--</span> °C
         </div>
 
-        <!-- stored fixed calibration point -->
         <div id="stored_ec_p1">
           <span id="cal_ec_p1_v">--</span><br>
           <span id="cal_ec_p1_temp">--</span>
@@ -1033,17 +1105,20 @@ button { padding:10px; margin:5px; }
 
       </div>
 
-        <input id="ecCal1Value"
-              class="timerValue"
-              type="number"
-              step="0.01"
-              placeholder="EC">
+      <input id="ecCal1Value"
+             class="timerValue"
+             type="number"
+             step="0.01"
+             placeholder="EC">
 
-        <div class="timerUnit">mS/cm</div>
+      <div class="timerUnit">mS/cm</div>
 
-      </div>
+    </div>
 
-      <div class="timerRow compact">
+
+    <!-- EC2 -->
+
+    <div class="timerRow compact">
 
       <button id="calib_ec_p2"
               class="calibBtn"
@@ -1051,7 +1126,12 @@ button { padding:10px; margin:5px; }
         EC2
       </button>
 
-      <div style="font-size:11px; line-height:1.2; margin-left:6px; min-width:70px;">
+      <div style="
+        font-size:11px;
+        line-height:1.2;
+        margin-left:6px;
+        min-width:70px;
+      ">
 
         <div id="live_ec_p2" style="display:none;">
           <span id="live_ec_voltage_p2">--</span> V<br>
@@ -1065,101 +1145,140 @@ button { padding:10px; margin:5px; }
 
       </div>
 
-        <input id="ecCal2Value"
-              class="timerValue"
-              type="number"
-              step="0.01"
-              placeholder="EC">
+      <input id="ecCal2Value"
+             class="timerValue"
+             type="number"
+             step="0.01"
+             placeholder="EC">
 
-        <div class="timerUnit">mS/cm</div>
-
-      </div>
-
-      <div class="timerRow compact">
-
-        <button id="calib_ph_p1"
-                class="calibBtn"
-                onclick="setState('/calibrate_ph_p1?value=' + encodeURIComponent(document.getElementById('phCal1Value').value))">
-          pH1
-        </button>
-
-        <div style="font-size:11px; line-height:1.2; margin-left:6px; min-width:70px;">
-
-          <div id="live_ph_p1" style="display:none;">
-            <span id="live_ph_voltage_p1">--</span> V<br>
-            <span id="live_ph_temp_p1">--</span> °C
-          </div>
-
-          <div id="stored_ph_p1">
-            <span id="cal_ph_p1_v">--</span><br>
-            <span id="cal_ph_p1_temp">--</span>
-          </div>
-
-        </div>
-
-        <input id="phCal1Value"
-              class="timerValue"
-              type="number"
-              step="0.01"
-              placeholder="pH">
-
-        <div class="timerUnit">pH</div>
-
-      </div>
-
-      <div class="timerRow compact">
-
-        <button id="calib_ph_p2"
-                class="calibBtn"
-                onclick="setState('/calibrate_ph_p2?value=' + encodeURIComponent(document.getElementById('phCal2Value').value))">
-          pH2
-        </button>
-
-        <div style="font-size:11px; line-height:1.2; margin-left:6px; min-width:70px;">
-
-          <div id="live_ph_p2" style="display:none;">
-            <span id="live_ph_voltage_p2">--</span> V<br>
-            <span id="live_ph_temp_p2">--</span> °C
-          </div>
-
-          <div id="stored_ph_p2">
-            <span id="cal_ph_p2_v">--</span><br>
-            <span id="cal_ph_p2_temp">--</span>
-          </div>
-
-        </div>
-
-        <input id="phCal2Value"
-              class="timerValue"
-              type="number"
-              step="0.01"
-              placeholder="pH">
-
-        <div class="timerUnit">pH</div>
-
-      </div>
-
-      </div>
-
-      <!-- ================= MANUAL PUMP CONTROL ================= -->
-
-      <hr style="width:260px;margin:15px 0;">
-
-      <h3 style="margin:5px 0;">Manual Pump Control</h3>
-
-      <div id="pumpControls"
-           style="
-             display:flex;
-             flex-direction:column;
-             gap:8px;
-             width:340px;
-           ">
-      </div>
+      <div class="timerUnit">mS/cm</div>
 
     </div>
-  </div>
-</div>
 
+  </div>
+  <!-- END EC CALIBRATION SECTION -->
+
+
+  <!-- ================================================= -->
+  <!-- PH CALIBRATION SECTION - HIDDEN INITIALLY -->
+  <!-- ================================================= -->
+
+  <div id="phCalibSection"
+       style="
+         display:none;
+         flex-direction:column;
+         gap:6px;
+       ">
+
+    <!-- PH1 -->
+
+    <div class="timerRow compact">
+
+      <button id="calib_ph_p1"
+              class="calibBtn"
+              onclick="setState('/calibrate_ph_p1?value=' + encodeURIComponent(document.getElementById('phCal1Value').value))">
+        pH1
+      </button>
+
+      <div style="
+        font-size:11px;
+        line-height:1.2;
+        margin-left:6px;
+        min-width:70px;
+      ">
+
+        <div id="live_ph_p1" style="display:none;">
+          <span id="live_ph_voltage_p1">--</span> V<br>
+          <span id="live_ph_temp_p1">--</span> °C
+        </div>
+
+        <div id="stored_ph_p1">
+          <span id="cal_ph_p1_v">--</span><br>
+          <span id="cal_ph_p1_temp">--</span>
+        </div>
+
+      </div>
+
+      <input id="phCal1Value"
+             class="timerValue"
+             type="number"
+             step="0.01"
+             placeholder="pH">
+
+      <div class="timerUnit">pH</div>
+
+    </div>
+
+
+    <!-- PH2 -->
+
+    <div class="timerRow compact">
+
+      <button id="calib_ph_p2"
+              class="calibBtn"
+              onclick="setState('/calibrate_ph_p2?value=' + encodeURIComponent(document.getElementById('phCal2Value').value))">
+        pH2
+      </button>
+
+      <div style="
+        font-size:11px;
+        line-height:1.2;
+        margin-left:6px;
+        min-width:70px;
+      ">
+
+        <div id="live_ph_p2" style="display:none;">
+          <span id="live_ph_voltage_p2">--</span> V<br>
+          <span id="live_ph_temp_p2">--</span> °C
+        </div>
+
+        <div id="stored_ph_p2">
+          <span id="cal_ph_p2_v">--</span><br>
+          <span id="cal_ph_p2_temp">--</span>
+        </div>
+
+      </div>
+
+      <input id="phCal2Value"
+             class="timerValue"
+             type="number"
+             step="0.01"
+             placeholder="pH">
+
+      <div class="timerUnit">pH</div>
+
+    </div>
+
+  </div>
+  <!-- END PH CALIBRATION SECTION -->
+
+
+<!-- ================= MANUAL PUMP CONTROL ================= -->
+
+<div id="pumpControlSection"
+     style="
+       display:none;
+       flex-direction:column;
+       align-items:center;
+       gap:6px;
+     ">
+
+  <hr style="width:260px;margin:15px 0 8px;">
+
+  <h3 style="margin:5px 0;font-size:16px;">
+    Manual Pump Control
+  </h3>
+
+  <div id="pumpControls"
+       style="
+         display:flex;
+         flex-direction:column;
+         gap:4px;
+         width:300px;
+       ">
+  </div>
+
+</div>
 
 
 <!-- ================= MONITOR TAB ================= -->
@@ -1248,75 +1367,139 @@ function setState(route)
 
 let ecCalibEnabled = false;
 let phCalibEnabled = false;
+let pumpControlEnabled = false;
+
+function updatePumpLock()
+{
+    const section = document.getElementById('pumpControlSection');
+    const lockBtn = document.getElementById('pumpLockBtn');
+
+    if(section)
+    {
+        section.style.display =
+            pumpControlEnabled ? 'flex' : 'none';
+    }
+
+    if(lockBtn)
+    {
+        if(pumpControlEnabled)
+        {
+            lockBtn.innerHTML = 'PUMP ENABLED';
+            lockBtn.style.background = '#4CAF50';
+        }
+        else
+        {
+            lockBtn.innerHTML = 'PUMP LOCKED';
+            lockBtn.style.background = '#d9534f';
+        }
+    }
+}
+
+function togglePumpLock()
+{
+    pumpControlEnabled = !pumpControlEnabled;
+    updatePumpLock();
+}
+
 
 function updateEcCalibLock()
 {
-  const enabled = ecCalibEnabled;
+    const enabled = ecCalibEnabled;
 
-  document.querySelectorAll(
-    '#calib_ec_p1, #calib_ec_p2'
-  ).forEach(btn => {
-    btn.disabled = !enabled;
-    btn.style.opacity = enabled ? "1.0" : "0.4";
-  });
+    // Show / hide EC calibration section
+    const section = document.getElementById('ecCalibSection');
 
-  ['ec_p1', 'ec_p2'].forEach(id => {
+    if (section) {
+        section.style.display = enabled ? 'flex' : 'none';
+    }
 
-    document.getElementById('live_' + id).style.display =
-      enabled ? 'block' : 'none';
+    // Enable / disable EC calibration buttons
+    document.querySelectorAll(
+        '#calib_ec_p1, #calib_ec_p2'
+    ).forEach(btn => {
+        btn.disabled = !enabled;
+        btn.style.opacity = enabled ? '1.0' : '0.4';
+    });
 
-    document.getElementById('stored_' + id).style.display =
-      enabled ? 'none' : 'block';
-  });
+    // Show live values while EC calibration is enabled
+    ['ec_p1', 'ec_p2'].forEach(id => {
 
-  const lockBtn =
-    document.getElementById('calibEcLockBtn');
+        const live = document.getElementById('live_' + id);
+        const stored = document.getElementById('stored_' + id);
 
-  if(enabled)
-  {
-    lockBtn.innerHTML = "EC ENABLED";
-    lockBtn.style.background = "#4CAF50";
-  }
-  else
-  {
-    lockBtn.innerHTML = "EC LOCKED";
-    lockBtn.style.background = "#d9534f";
-  }
+        if (live) {
+            live.style.display = enabled ? 'block' : 'none';
+        }
+
+        if (stored) {
+            stored.style.display = enabled ? 'none' : 'block';
+        }
+    });
+
+    // Update lock button
+    const lockBtn = document.getElementById('calibEcLockBtn');
+
+    if (lockBtn) {
+
+        if (enabled) {
+            lockBtn.innerHTML = 'EC ENABLED';
+            lockBtn.style.background = '#4CAF50';
+        }
+        else {
+            lockBtn.innerHTML = 'EC LOCKED';
+            lockBtn.style.background = '#d9534f';
+        }
+    }
 }
 
 function updatePhCalibLock()
 {
-  const enabled = phCalibEnabled;
+    const enabled = phCalibEnabled;
 
-  document.querySelectorAll(
-    '#calib_ph_p1, #calib_ph_p2'
-  ).forEach(btn => {
-    btn.disabled = !enabled;
-    btn.style.opacity = enabled ? "1.0" : "0.4";
-  });
+    // Show / hide PH calibration section
+    const section = document.getElementById('phCalibSection');
 
-  ['ph_p1', 'ph_p2'].forEach(id => {
+    if (section) {
+        section.style.display = enabled ? 'flex' : 'none';
+    }
 
-    document.getElementById('live_' + id).style.display =
-      enabled ? 'block' : 'none';
+    // Enable / disable PH calibration buttons
+    document.querySelectorAll(
+        '#calib_ph_p1, #calib_ph_p2'
+    ).forEach(btn => {
+        btn.disabled = !enabled;
+        btn.style.opacity = enabled ? '1.0' : '0.4';
+    });
 
-    document.getElementById('stored_' + id).style.display =
-      enabled ? 'none' : 'block';
-  });
+    // Show live values while PH calibration is enabled
+    ['ph_p1', 'ph_p2'].forEach(id => {
 
-  const lockBtn =
-    document.getElementById('calibPhLockBtn');
+        const live = document.getElementById('live_' + id);
+        const stored = document.getElementById('stored_' + id);
 
-  if(enabled)
-  {
-    lockBtn.innerHTML = "PH ENABLED";
-    lockBtn.style.background = "#4CAF50";
-  }
-  else
-  {
-    lockBtn.innerHTML = "PH LOCKED";
-    lockBtn.style.background = "#d9534f";
-  }
+        if (live) {
+            live.style.display = enabled ? 'block' : 'none';
+        }
+
+        if (stored) {
+            stored.style.display = enabled ? 'none' : 'block';
+        }
+    });
+
+    // Update lock button
+    const lockBtn = document.getElementById('calibPhLockBtn');
+
+    if (lockBtn) {
+
+        if (enabled) {
+            lockBtn.innerHTML = 'PH ENABLED';
+            lockBtn.style.background = '#4CAF50';
+        }
+        else {
+            lockBtn.innerHTML = 'PH LOCKED';
+            lockBtn.style.background = '#d9534f';
+        }
+    }
 }
 
 function toggleEcCalibLock()
@@ -1464,24 +1647,63 @@ function createPumpControls()
 {
     const root = document.getElementById("pumpControls");
 
-    pumpList.forEach(p=>{
+    pumpList.forEach(p => {
 
-        let row=document.createElement("div");
+        let row = document.createElement("div");
 
-        row.style.display="grid";
-        row.style.gridTemplateColumns=p.reverse?
-            "70px 70px 70px 70px":
-            "70px 70px 70px";
+        row.style.display = "grid";
 
-        row.style.gap="5px";
+        row.style.gridTemplateColumns =
+            p.reverse
+                ? "65px 65px 65px 65px"
+                : "65px 65px 65px";
 
-        row.innerHTML=
-        `<div style="font-weight:bold;align-self:center;">${p.name}</div>
-         <button onclick="pumpCmd('${p.route}','pump')">PUMP</button>
-         <button onclick="pumpCmd('${p.route}','stop')">STOP</button>`+
-        (p.reverse?
-        `<button onclick="pumpCmd('${p.route}','reverse')">REV</button>`
-        :"");
+        row.style.gap = "3px";
+        row.style.alignItems = "center";
+
+        row.innerHTML =
+        `<div style="
+            font-weight:bold;
+            font-size:11px;
+            align-self:center;
+         ">
+            ${p.name}
+         </div>
+
+         <button
+            style="
+              height:28px;
+              padding:2px 5px;
+              margin:0;
+              font-size:10px;
+            "
+            onclick="pumpCmd('${p.route}','pump')">
+            PUMP
+         </button>
+
+         <button
+            style="
+              height:28px;
+              padding:2px 5px;
+              margin:0;
+              font-size:10px;
+            "
+            onclick="pumpCmd('${p.route}','stop')">
+            STOP
+         </button>` +
+
+        (p.reverse ?
+        `<button
+            style="
+              height:28px;
+              padding:2px 5px;
+              margin:0;
+              font-size:10px;
+            "
+            onclick="pumpCmd('${p.route}','reverse')">
+            REV
+         </button>`
+        : "");
 
         root.appendChild(row);
     });
@@ -2157,6 +2379,7 @@ createPumpControls();
 // calibration starts LOCKED
 updateEcCalibLock();
 updatePhCalibLock();
+updatePumpLock();
 
 </script>
 

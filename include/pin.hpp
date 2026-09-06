@@ -104,12 +104,20 @@ public:
   , _resolution(resolution)
   , _trace(trace)
   {
+    _defaultDuty = duty;
+    _enabled = false;
+    _percent = 0.0f;
+
+    // Put GPIO into a known safe state first
+    pinMode(p.idx, OUTPUT);
+    digitalWrite(p.idx, LOW);
+
+    // Configure PWM
     ledcSetup(_channel, _freq, _resolution);
     ledcAttachPin(p.idx, _channel);
 
-    _defaultDuty = duty;
-    _enabled = false;
-
+    // IMPORTANT: explicitly force initial duty to zero
+    ledcWrite(_channel, 0);
   }
 
   // ==================================================
