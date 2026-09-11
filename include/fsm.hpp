@@ -24,8 +24,8 @@ extern task_t second_task;
 extern task_t sensor_proc_task;
 
 extern int cycle_time_minutes;
-extern int watering_minutes;
-extern int flush_minutes;
+extern int watering_seconds;
+extern int flush_seconds;
 extern int flush_delay_seconds;
 extern int fertilize_seconds;
 extern int ph_seconds;
@@ -36,6 +36,7 @@ extern float ec_tolerance;
 extern float ph_regulator;
 extern float ph_tolerance;
 
+extern bool force_regulation;
 extern bool sensor_process;
 extern bool stop_locked;
 extern void setStopLock(bool lock);

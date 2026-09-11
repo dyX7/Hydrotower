@@ -112,7 +112,7 @@ void web_pumps(pumps_t pump, pump_dir dir, float duty)
       case pump_dir::REVERSE: dirName = "REVERSE"; break;
     }
 
-    web_log(pumpName + String(" ") + dirName + String(" duty=") + duty );
+    // web_log(pumpName + String(" ") + dirName + String(" duty=") + duty );
   }
 }
 
@@ -136,9 +136,9 @@ void web_add_data_hist(float ec_v, float ph_v, float temp)
   }
 
   web_log(String("HIST idx=") + hist_index +
-          " ec=" + String(ec_v, 2) +
-          " ph=" + String(ph_v, 2) +
-          " t=" + String(temp, 2));
+          " ec= " + String(ec_v, 2) +
+          " ph= " + String(ph_v, 2) +
+          " t= " + String(temp, 2));
   
 }
 
@@ -353,6 +353,11 @@ button { padding:10px; margin:5px; }
   box-sizing: border-box;
   background-color: #ddf9df;
   gap: 4px;
+  transition: background-color 0.2s;
+}
+
+.topBar.waterLow {
+  background-color: orange;
 }
 
 .topRow1 {
@@ -399,38 +404,160 @@ button { padding:10px; margin:5px; }
   cursor: pointer;
 }
 
-.buttonGrid {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-}
-
-.stateBtn {
-  width: 90px;
-  height: 42px;
-  margin: 3px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  font-size: 12px;
-  font-weight: bold;
-  border-radius: 7px;
-}
-
 .activeTab {
   background-color: #8fd694;
   border: 2px solid #4f9c57;
 }
 
+.buttonGrid {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 15px;
+}
+
 .stateButtonGrid {
   display: grid;
-  grid-template-columns: repeat(3, 90px);
-  grid-template-rows: repeat(2, 42px);
+
+  /* Always use the available mobile width */
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+
+  /* 5 equal columns */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+
+  /* 3 rows */
+  grid-template-rows: repeat(3, 42px);
+
   gap: 6px;
-  width: fit-content;
+}
+
+
+/* ================= ROW 1 ================= */
+
+.stateButtonGrid .stateBtn:nth-child(1) {
+  grid-column: 1 / 3;
+  grid-row: 1;
+  width: 100%;
+}
+
+.stateButtonGrid .stateBtn:nth-child(2) {
+  grid-column: 4 / 6;
+  grid-row: 1;
+  width: 100%;
+}
+
+
+/* ================= ROW 2 ================= */
+
+.stateButtonGrid .stateBtn:nth-child(3) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.stateButtonGrid .stateBtn:nth-child(4) {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.stateButtonGrid .stateBtn:nth-child(5) {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.stateButtonGrid .stateBtn:nth-child(6) {
+  grid-column: 4;
+  grid-row: 2;
+}
+
+.stateButtonGrid .stateBtn:nth-child(7) {
+  grid-column: 5;
+  grid-row: 2;
+}
+
+
+/* ================= ROW 3 ================= */
+
+/* Pump lock uses the complete same width */
+#pumpLockBtn {
+  grid-column: 1 / 6 !important;
+  grid-row: 3 !important;
+  width: 100% !important;
+}
+
+
+/* ================= BUTTON STYLE ================= */
+
+.stateBtn {
+  width: 100%;
+  height: 42px;
+
+  margin: 0;
+  box-sizing: border-box;
+
+  display: flex;
+  align-items: center;
   justify-content: center;
-  margin: 0 auto;
+
+  text-align: center;
+
+  font-size: 12px;
+  font-weight: bold;
+
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+
+/* ================= ACTUAL STATE = GREEN ================= */
+
+.stateBtn.active {
+  background: #4CAF50 !important;
+  color: white !important;
+  border-radius: 7px !important;
+  box-shadow: 0 0 8px rgba(76,175,80,0.6);
+}
+
+
+/* ================= WAITING FOR STATE MACHINE = GREY ================= */
+
+.stateBtn.pending {
+  background: #808080 !important;
+  color: white !important;
+  border-radius: 7px !important;
+  box-shadow: none !important;
+}
+
+
+/* Physical press */
+.stateBtn:active {
+  background: #808080 !important;
+  color: white !important;
+}
+
+
+/* Motor buttons remain unchanged */
+.motorBtn.active {
+  background: #4CAF50 !important;
+  color: white !important;
+  border-radius: 5px;
+  box-shadow: 0 0 6px rgba(76,175,80,0.6);
+}
+
+.motorBtn.stop {
+  background: #6c6a6a !important;
+  color: white !important;
+  border-radius: 5px;
+  box-shadow: 0 0 6px rgba(105, 102, 102, 0.6);
+}
+
+.motorBtn.reverseActive {
+  background: #f44336 !important;
+  color: white !important;
+  border-radius: 5px;
+  box-shadow: 0 0 6px rgba(244,67,54,0.6);
 }
 
 .pumpLamps {
@@ -742,73 +869,87 @@ button { padding:10px; margin:5px; }
     <div class="buttonGrid">
 
       <div class="stateButtonGrid">
-        <button class="stateBtn" onclick="setState('/idle')">IDLE</button>
-        <button class="stateBtn" onclick="setState('/stop')">STOP</button>
 
-        <button class="stateBtn" onclick="setState('/water')">WATER</button>
-        <button class="stateBtn" onclick="setState('/measure')">MEASURE</button>
+        <!-- ================= ROW 1 ================= -->
 
-        <button class="stateBtn" onclick="setState('/regulate')">REGULATE</button>
-        <button class="stateBtn" onclick="setState('/flush')">FLUSH</button>
+        <button
+          class="stateBtn"
+          onclick="setState('/idle')"
+          onpointerdown="stateButtonPressed(this)">
+          IDLE
+        </button>
+
+        <button
+          class="stateBtn"
+          onclick="setState('/stop')"
+          onpointerdown="stateButtonPressed(this)">
+          STOP
+        </button>
+
+
+        <!-- ================= ROW 2 ================= -->
+
+        <button
+          class="stateBtn"
+          onclick="setState('/water')"
+          onpointerdown="stateButtonPressed(this)">
+          WATER
+        </button>
+
+        <button
+          class="stateBtn"
+          onclick="setState('/measure')"
+          onpointerdown="stateButtonPressed(this)">
+          MEASURE
+        </button>
+
+        <button
+          class="stateBtn"
+          onclick="setState('/regulate_ec')"
+          onpointerdown="stateButtonPressed(this)">
+          EC
+        </button>
+
+        <button
+          class="stateBtn"
+          onclick="setState('/regulate_ph')"
+          onpointerdown="stateButtonPressed(this)">
+          PH
+        </button>
+
+        <button
+          class="stateBtn"
+          onclick="setState('/flush')"
+          onpointerdown="stateButtonPressed(this)">
+          FLUSH
+        </button>
+
+
+        <!-- ================= ROW 3 ================= -->
+
+        <button
+          id="pumpLockBtn"
+          class="stateBtn pumpLockBtn"
+          onclick="togglePumpLock()">
+          PUMPS LOCKED
+        </button>
+
       </div>
 
     </div>
 
-    <div style="
-      display:flex;
-      justify-content:center;
-      margin-top:8px;
-    ">
 
-      <button
-        class="stateBtn"
-        id="pumpLockBtn"
-        onclick="togglePumpLock()"
-        style="
-          width:160px;
-          height:40px;
-          font-size:12px;
-          background:#d9534f;
-          color:white;
-          border:none;
-          border-radius:6px;
-          margin:0;
-        ">
-        PUMPS LOCKED
-      </button>
+    <!-- ================= MANUAL PUMP CONTROL ================= -->
+
+    <div
+      id="pumpControlSection"
+      style="display:none;">
+
+      <div id="pumpControls"></div>
 
     </div>
 
   </div>
-
-  
-<!-- ================= MANUAL PUMP CONTROL ================= -->
-
-<div id="pumpControlSection"
-     style="
-       display:none;
-       flex-direction:column;
-       align-items:center;
-       gap:6px;
-     ">
-
-  <hr style="width:260px;margin:15px 0 8px;">
-
-  <h3 style="margin:5px 0;font-size:16px;">
-    Manual Pump Control
-  </h3>
-
-  <div id="pumpControls"
-       style="
-         display:flex;
-         flex-direction:column;
-         gap:4px;
-         width:300px;
-       ">
-  </div>
-
-</div>
-  
 
 </div>
 
@@ -929,13 +1070,13 @@ button { padding:10px; margin:5px; }
           <div class="paramRow">
             <div class="timerLabel">Water</div>
             <input id="water" class="timerValue" type="number">
-            <div class="timerUnit">min</div>
+            <div class="timerUnit">sec</div>
           </div>
 
           <div class="paramRow">
             <div class="timerLabel">Flush</div>
             <input id="flush" class="timerValue" type="number">
-            <div class="timerUnit">min</div>
+            <div class="timerUnit">sec</div>
           </div>
 
           <div class="paramRow">
@@ -1017,6 +1158,32 @@ button { padding:10px; margin:5px; }
 
 </div> <!-- PARAM TAB END -->
 
+
+<!-- ================= MONITOR TAB ================= -->
+
+<div id="monitor" class="tab">
+
+  <div style="display:flex; justify-content:center; width:100%; padding:10px; box-sizing:border-box;">
+    <pre id="log"
+      style="
+        text-align:left;
+        width:100%;
+        max-width:1200px;
+        height:80vh;
+        overflow:auto;
+        background:rgba(255,255,255,0.7);
+        color:black;
+        padding:12px;
+        border-radius:10px;
+        box-shadow:0 2px 8px rgba(0,0,0,0.1);
+        font-size:12px;
+        line-height:1.4;
+        white-space:pre-wrap;
+        word-break:break-word;
+      "></pre>
+  </div>
+
+</div>
 
 <!-- ================= CALIB TAB ================= -->
 
@@ -1268,33 +1435,9 @@ button { padding:10px; margin:5px; }
     </div>
 
   </div>
-  <!-- END PH CALIBRATION SECTION -->
-
-<!-- ================= MONITOR TAB ================= -->
-
-<div id="monitor" class="tab">
-
-<div style="display:flex; justify-content:center; width:100%; padding:10px; box-sizing:border-box;">
-  <pre id="log"
-    style="
-      text-align:left;
-      width:100%;
-      max-width:1200px;
-      height:80vh;
-      overflow:auto;
-      background:rgba(255,255,255,0.7);
-      color:black;
-      padding:12px;
-      border-radius:10px;
-      box-shadow:0 2px 8px rgba(0,0,0,0.1);
-      font-size:12px;
-      line-height:1.4;
-      white-space:pre-wrap;
-      word-break:break-word;
-    "></pre>
-</div>
 
 </div>
+
 
 <script>
 
@@ -1350,9 +1493,166 @@ function showTab(id)
 
 function setState(route)
 {
-  fetch(route.startsWith("/") ? route : "/" + route);
+    fetch(route);
 }
 
+function stateButtonPressed(btn)
+{
+    /*
+     * Remove pending indication from all state buttons.
+     */
+    document.querySelectorAll('.stateBtn')
+        .forEach(button => {
+            button.classList.remove('pending');
+        });
+
+
+    /*
+     * The button the user pressed becomes GREY.
+     *
+     * It stays grey after the finger/mouse is released
+     * until the ESP32 reports the requested state.
+     */
+    btn.classList.add('pending');
+}
+
+function updateStateButtons(currentState)
+{
+    /*
+     * Remove all visual state indications first.
+     *
+     * This means no button is green or grey-pending
+     * until we know what the ESP32 is actually doing.
+     */
+    document.querySelectorAll('.stateBtn')
+        .forEach(btn => {
+            btn.classList.remove('active');
+            btn.classList.remove('pending');
+        });
+
+
+    /*
+     * Convert ESP32 state to uppercase text.
+     */
+    const state = String(currentState).toUpperCase();
+
+
+    /*
+     * Determine which Control button belongs
+     * to the ACTUAL ESP32 state.
+     */
+    let activeRoute = null;
+
+
+    /* ================= IDLE ================= */
+
+    if(
+        state === "STATE_IDLE" ||
+        state === "IDLE"
+    )
+    {
+        activeRoute = "/idle";
+    }
+
+
+    /* ================= STOP ================= */
+
+    else if(
+        state === "STATE_STOP" ||
+        state === "STOP"
+    )
+    {
+        activeRoute = "/stop";
+    }
+
+
+    /* ================= WATERING ================= */
+
+    else if(
+        state === "STATE_WATERING" ||
+        state === "STATE_WATERING_PUMP" ||
+        state === "STATE_WATERING_WAIT" ||
+        state === "WATERING"
+    )
+    {
+        activeRoute = "/water";
+    }
+
+
+    /* ================= MEASUREMENT ================= */
+
+    else if(
+        state === "STATE_MEASURE" ||
+        state === "STATE_MEASURE_EC" ||
+        state === "STATE_MEASURE_PH" ||
+        state === "MEASURE"
+    )
+    {
+        activeRoute = "/measure";
+    }
+
+
+    /* ================= REGULATION EC ================= */
+
+    else if(
+        state === "STATE_REG1_FERT_A" ||
+        state === "STATE_REG2_WAIT" ||
+        state === "STATE_REG3_FERT_B"
+    )
+    {
+        activeRoute = "/regulate_ec";
+    }
+
+
+    /* ================= REGULATION PH ================= */
+
+    else if(
+        state === "STATE_REG_PH"
+    )
+    {
+        activeRoute = "/regulate_ph";
+    }
+
+
+    /* ================= FLUSH ================= */
+
+    else if(
+        state === "STATE_FLUSH" ||
+        state === "STATE_FLUSH_PUMP" ||
+        state === "STATE_FLUSH_WAIT" ||
+        state === "STATE_FLUSH_REVERSE" ||
+        state === "FLUSH"
+    )
+    {
+        activeRoute = "/flush";
+    }
+
+
+    /*
+     * Only NOW make a button GREEN.
+     *
+     * At this point the ESP32 has reported
+     * that it really switched to the state.
+     */
+    if(activeRoute)
+    {
+        document.querySelectorAll('.stateBtn')
+            .forEach(btn => {
+
+                const onclickText =
+                    btn.getAttribute('onclick');
+
+                if(
+                    onclickText &&
+                    onclickText.includes(activeRoute)
+                )
+                {
+                    btn.classList.add('active');
+                }
+
+            });
+    }
+}
 
 let ecCalibEnabled = false;
 let phCalibEnabled = false;
@@ -1360,8 +1660,12 @@ let pumpControlEnabled = false;
 
 function updatePumpLock()
 {
-    const section = document.getElementById('pumpControlSection');
-    const lockBtn = document.getElementById('pumpLockBtn');
+    const section =
+        document.getElementById('pumpControlSection');
+
+    const lockBtn =
+        document.getElementById('pumpLockBtn');
+
 
     if(section)
     {
@@ -1369,8 +1673,18 @@ function updatePumpLock()
             pumpControlEnabled ? 'flex' : 'none';
     }
 
+
     if(lockBtn)
     {
+        /*
+         * Pump lock is NOT a state-machine button.
+         * Its color represents the manual-control lock.
+         */
+
+        lockBtn.classList.remove('active');
+        lockBtn.classList.remove('pending');
+
+
         if(pumpControlEnabled)
         {
             lockBtn.innerHTML = 'MANUAL CONTROL';
@@ -1384,12 +1698,96 @@ function updatePumpLock()
     }
 }
 
-function togglePumpLock()
+function updateMotorButtons(pumps)
 {
-    pumpControlEnabled = !pumpControlEnabled;
-    updatePumpLock();
+    if(!Array.isArray(pumps))
+        return;
+
+    // IMPORTANT:
+    // This order MUST exactly match the ESP32 pumps[] array:
+    //
+    // 0 = MAIN_PUMP
+    // 1 = PH_PLUS
+    // 2 = PH_MINUS
+    // 3 = FERTILIZER_A
+    // 4 = FERTILIZER_B
+
+    const pumpList = [
+        {route:"MAIN_PUMP"},
+        {route:"PH_PLUS"},
+        {route:"PH_MINUS"},
+        {route:"FERTILIZER_A"},
+        {route:"FERTILIZER_B"}
+    ];
+
+    for(let i = 0; i < pumpList.length; i++)
+    {
+        const route = pumpList[i].route;
+
+        const pumpBtn =
+            document.getElementById(route + "_pump");
+
+        const stopBtn =
+            document.getElementById(route + "_stop");
+
+        const reverseBtn =
+            document.getElementById(route + "_reverse");
+
+        // Clear previous indication
+        if(pumpBtn)
+            pumpBtn.classList.remove("active");
+
+        if(stopBtn)
+            stopBtn.classList.remove("stop");
+
+        if(reverseBtn)
+        {
+            reverseBtn.classList.remove("active");
+            reverseBtn.classList.remove("reverseActive");
+        }
+
+        // ESP32 pump state:
+        // 0 = STOP
+        // 1 = PUMP
+        // 2 = REVERSE
+
+        switch(Number(pumps[i]))
+        {
+            case 1:
+                if(pumpBtn)
+                    pumpBtn.classList.add("active");
+                break;
+
+            case 2:
+                if(reverseBtn)
+                    reverseBtn.classList.add("reverseActive");
+                break;
+
+            default:
+                if(stopBtn)
+                    stopBtn.classList.add("stop");
+                break;
+        }
+    }
 }
 
+function togglePumpLock()
+{
+    const newState = !pumpControlEnabled;
+
+    const route = newState
+        ? '/pumps_enable'
+        : '/pumps_disable';
+
+    fetch(route).then(response =>
+    {
+        if(!response.ok)
+            return;
+
+        pumpControlEnabled = newState;
+        updatePumpLock();
+    });
+}
 
 function updateEcCalibLock()
 {
@@ -1636,6 +2034,11 @@ function createPumpControls()
 {
     const root = document.getElementById("pumpControls");
 
+    if(!root)
+        return;
+
+    root.innerHTML = "";
+
     pumpList.forEach(p => {
 
         let row = document.createElement("div");
@@ -1644,8 +2047,8 @@ function createPumpControls()
 
         row.style.gridTemplateColumns =
             p.reverse
-                ? "65px 65px 65px 65px"
-                : "65px 65px 65px";
+                ? "90px 90px 90px 90px"
+                : "90px 90px 90px";
 
         row.style.gap = "3px";
         row.style.alignItems = "center";
@@ -1660,6 +2063,8 @@ function createPumpControls()
          </div>
 
          <button
+            class="motorBtn"
+            id="${p.route}_pump"
             style="
               height:28px;
               padding:2px 5px;
@@ -1671,6 +2076,8 @@ function createPumpControls()
          </button>
 
          <button
+            class="motorBtn"
+            id="${p.route}_stop"
             style="
               height:28px;
               padding:2px 5px;
@@ -1682,7 +2089,10 @@ function createPumpControls()
          </button>` +
 
         (p.reverse ?
+
         `<button
+            class="motorBtn"
+            id="${p.route}_reverse"
             style="
               height:28px;
               padding:2px 5px;
@@ -1692,6 +2102,7 @@ function createPumpControls()
             onclick="pumpCmd('${p.route}','reverse')">
             REV
          </button>`
+
         : "");
 
         root.appendChild(row);
@@ -1701,6 +2112,33 @@ function createPumpControls()
 function pumpCmd(pump, dir)
 {
     fetch(`/pump?motor=${pump}&dir=${dir}`);
+
+    // Remove active state from this motor's buttons
+    const pumpBtn = document.getElementById(pump + "_pump");
+    const stopBtn = document.getElementById(pump + "_stop");
+    const reverseBtn = document.getElementById(pump + "_reverse");
+
+    if(pumpBtn) pumpBtn.classList.remove("active");
+    if(stopBtn) stopBtn.classList.remove("active");
+    if(reverseBtn)
+    {
+        reverseBtn.classList.remove("active");
+        reverseBtn.classList.remove("reverseActive");
+    }
+
+    // Highlight selected command
+    if(dir === "pump" && pumpBtn)
+    {
+        pumpBtn.classList.add("active");
+    }
+    else if(dir === "stop" && stopBtn)
+    {
+        stopBtn.classList.add("active");
+    }
+    else if(dir === "reverse" && reverseBtn)
+    {
+        reverseBtn.classList.add("reverseActive");
+    }
 }
 
 function toggle(url, btnId)
@@ -2097,7 +2535,13 @@ async function update()
     if(!d)
       return;
 
+    // ================= states =================
+
+    updateStateButtons(d.state);
+
     // ================= PUMPS =================
+
+    updateMotorButtons(d.pumps);
 
     if(Array.isArray(d.pumps))
     {
@@ -2131,6 +2575,12 @@ async function update()
 
     document.getElementById('time').innerText = d.time || "--";
     document.getElementById('stateControl').innerText = d.state || "---";
+
+    const topBar = document.querySelector('.topBar');
+
+    if (topBar) {
+        topBar.classList.toggle('waterLow', !d.waterLevelLow);
+    }
 
     const timerEl = document.getElementById('timerControl');
     const unitEl = document.getElementById('timerUnit');
@@ -2444,9 +2894,9 @@ void connectWiFi()
 
   // -------- CONFIG --------
   prefs.begin("config", true);
-  cycle_time_minutes = prefs.getInt("idle", 10);
-  watering_minutes   = prefs.getInt("water", 5);
-  flush_minutes      = prefs.getInt("flush", 3);
+  cycle_time_minutes = prefs.getInt("idle", 5);
+  watering_seconds   = prefs.getInt("water", 30);
+  flush_seconds      = prefs.getInt("flush", 120);
   fertilize_seconds  = prefs.getInt("fertilize", 10);
   ph_seconds         = prefs.getInt("ph_seconds", 10);
   sleep_start_hour   = prefs.getInt("sh", 22);
@@ -2461,8 +2911,8 @@ void connectWiFi()
 
   web_log(
     "Load Parameter\n\tidle=" + String(cycle_time_minutes) +
-    "\n\twater=" + String(watering_minutes) +
-    "\n\tflush=" + String(flush_minutes) +
+    "\n\twater=" + String(watering_seconds) +
+    "\n\tflush=" + String(flush_seconds) +
     "\n\tfertilize=" + String(fertilize_seconds) +
     "\n\tph_seconds=" + String(ph_seconds) +
     "\n\tsleep=" + String(sleep_start_hour) + ":" + String(sleep_start_minute) + "-" + String(sleep_end_hour) + ":" + String(sleep_end_minute) +
@@ -2527,8 +2977,8 @@ String buildJson()
 
   json += "\"time\":\"" + getTimeString() + "\",";
   json += "\"idle\":" + String(cycle_time_minutes) + ",";
-  json += "\"water\":" + String(watering_minutes) + ",";
-  json += "\"flush\":" + String(flush_minutes) + ",";
+  json += "\"water\":" + String(watering_seconds) + ",";
+  json += "\"flush\":" + String(flush_seconds) + ",";
   json += "\"fertilize\":" + String(fertilize_seconds) + ",";
   json += "\"phSeconds\":" + String(ph_seconds) + ",";
   json += "\"sh\":" + String(sleep_start_hour) + ",";
@@ -2537,7 +2987,6 @@ String buildJson()
   json += "\"em\":" + String(sleep_end_minute) + ",";
   json += "\"ecReg\":" + String(ec_regulator, 2) + ",";
   json += "\"phReg\":" + String(ph_regulator, 2) + ",";
-
 
   json += "\"calib\":{";
   json += "\"ec_p1\":{";
@@ -2562,6 +3011,7 @@ String buildJson()
   json += "\"voltage\":" + String(ph_cal_2.voltage, 3) + "}";
   json += "},";
 
+  json += "\"waterLevelLow\":" + String(waterLevelLow.get() ? "true" : "false") + ",";
 
   json += "\"pumps\":[";
   for(int i = 0; i < 5; i++)
@@ -2685,14 +3135,10 @@ void loadCalibration()
   if(ec_cal_1.valid && ec_cal_2.valid)
   {
       web_log(
-        "Load EC calibration\n\tP1=" +
-        String(ec_cal_2.value, 2) +
-        "\n\tV1=" +
-        String(ec_cal_1.value, 2) +
-        "\n\tP2=" +
-        String(ec_cal_1.voltage, 3) +
-        "\n\tV2=" +
-        String(ec_cal_2.voltage, 3)
+        "Load EC calibration\n\tP1=" + String(ec_cal_1.value, 2) +
+        "\tV1=" + String(ec_cal_1.voltage, 3) +
+        "\n\tP2=" + String(ec_cal_2.value, 2) +
+        "\tV2=" + String(ec_cal_2.voltage, 3)
       );
   }
   else{
@@ -2784,6 +3230,19 @@ void setupRoutes()
       request->send(200, "text/plain", "OK");
   });
 
+  server.on("/pumps_enable", HTTP_GET, [](AsyncWebServerRequest *req)
+  {
+      gpioEnPumps.set(true);
+      web_log("PUMPS ENABLED");
+      req->send(200, "text/plain", "PUMPS ENABLED");
+  });
+
+  server.on("/pumps_disable", HTTP_GET, [](AsyncWebServerRequest *req)
+  {
+      gpioEnPumps.set(false);
+      web_log("PUMPS DISABLED");
+      req->send(200, "text/plain", "PUMPS DISABLED");
+  });
 
   server.on("/log", HTTP_GET, [](AsyncWebServerRequest *req)
   {
@@ -2814,14 +3273,14 @@ void setupRoutes()
 
     if(req->hasParam("water"))
     {
-      watering_minutes = req->getParam("water")->value().toInt();
-      prefs.putInt("water", watering_minutes);
+      watering_seconds = req->getParam("water")->value().toInt();
+      prefs.putInt("water", watering_seconds);
     }
 
     if(req->hasParam("flush"))
     {
-      flush_minutes = req->getParam("flush")->value().toInt();
-      prefs.putInt("flush", flush_minutes);
+      flush_seconds = req->getParam("flush")->value().toInt();
+      prefs.putInt("flush", flush_seconds);
     }
 
     if(req->hasParam("fertilize"))
@@ -2888,8 +3347,8 @@ void setupRoutes()
 
     web_log(
       "Saved\n\tidle=" + String(cycle_time_minutes) +
-      "\n\twater=" + String(watering_minutes) +
-      "\n\tflush=" + String(flush_minutes) +
+      "\n\twater=" + String(watering_seconds) +
+      "\n\tflush=" + String(flush_seconds) +
       "\n\tfertilize=" + String(fertilize_seconds) +
       "\n\tph_seconds=" + String(ph_seconds) +
       "\n\tsleep=" + String(sleep_start_hour) + ":" + String(sleep_start_minute) + "-" + String(sleep_end_hour) + ":" + String(sleep_end_minute) +
@@ -3030,12 +3489,22 @@ void setupRoutes()
       request->send(200, "text/plain", "OK");
   });
 
-  server.on("/regulate", HTTP_GET, [](AsyncWebServerRequest *request)
+  server.on("/regulate_ec", HTTP_GET, [](AsyncWebServerRequest *request)
   {
-      if (fsm.current != &STATE_REGULATE)
+      if (fsm.current != &STATE_REG1_FERT_A)
       {
-          setCommand(CMD_REGULATE, "REGULATE");
-      }
+          setCommand(CMD_REGULATE_EC, "REGULATE EC");
+      } 
+
+      request->send(200, "text/plain", "OK");
+  });
+
+    server.on("/regulate_ph", HTTP_GET, [](AsyncWebServerRequest *request)
+  {
+      if (fsm.current != &STATE_REG_PH)
+      {
+          setCommand(CMD_REGULATE_PH, "REGULATE PH");
+      } 
 
       request->send(200, "text/plain", "OK");
   });

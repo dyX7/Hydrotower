@@ -2,14 +2,14 @@
 
 // ------------ Status ----------------
 const pin_t waterLow {22, "WATER_LOW"};
-const pin_t relais24VPeristalticPumps {13, "EN_DEVICES"};
+const pin_t pinRelaisPumps {13, "EN_DEVICES"};
 
 // ------------ EC / pH Control ----------------
 const pin_t gpioEc1 {32, "EC1"};
 const pin_t gpioEc2 {33, "EC2"};
 
 // ------------ Main Pump ----------------
-const pin_t relais24VMotor {21, "MOT_MAIN"};
+const pin_t pinRelaisMainPump {21, "MOT_MAIN"};
 
 // ------------ pH+ Pump ----------------
 const pin_t pinPwmMot2Dose {25, "MOT_PH+_Dose"};
@@ -44,12 +44,12 @@ const pin_t gpio5  {5,  ""};
 
 // ---------------- GPIO ----------------
 gpio_in_t waterLevelLow{waterLow};
-gpio_out_t gpioEnPumps{relais24VPeristalticPumps};
+gpio_out_t gpioEnPumps{pinRelaisPumps};
 
 gpio_out_t gpioEcMeasure1{gpioEc1};
 gpio_out_t gpioEcMeasure2{gpioEc2};
 
-gpio_out_t gpioMainPump{relais24VMotor};
+gpio_out_t gpioMainPump{pinRelaisMainPump};
 
 pwm_out_t pwmPHplusDose(pinPwmMot2Dose, 1,  MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
 pwm_out_t pwmPHplusRev(pinPwmMot2Rev, 2,    MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);

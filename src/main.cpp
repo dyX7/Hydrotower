@@ -70,11 +70,20 @@ void loop()
       fsm.transitionTo(&STATE_MEASURE);
       break;
     }
-    case CMD_REGULATE:
+    case CMD_REGULATE_EC:
     {
-      web_log("Manual REGULATE");
+      web_log("Manual REGULATE EC");
+      force_regulation = true;
       setStopLock(false);
-      fsm.transitionTo(&STATE_REGULATE);
+      fsm.transitionTo(&STATE_REG1_FERT_A);
+      break;
+    }
+    case CMD_REGULATE_PH:
+    {
+      web_log("Manual REGULATE PH");
+      force_regulation = true;
+      setStopLock(false);
+      fsm.transitionTo(&STATE_REG_PH);
       break;
     }
     case CMD_FLUSH:

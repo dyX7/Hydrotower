@@ -21,10 +21,10 @@ enum class pump_dir : uint8_t
 extern const pin_t waterLow;
 
 // ------------ GPIO OUT ----------------
-extern const pin_t deviceRelais;
+extern const pin_t pinRelaisPumps;
 extern const pin_t gpioEc1;
 extern const pin_t gpioEc2;
-extern const pin_t pinPwmMot1;
+extern const pin_t pinRelaisMainPump;
 extern const pin_t pinPwmMot2Dose;
 extern const pin_t pinPwmMot2Rev;
 extern const pin_t pinPwmMot3Dose;
@@ -46,7 +46,7 @@ extern gpio_out_t gpioEcMeasure2;
 extern gpio_out_t gpioMainPump;
 extern gpio_out_t gpioEnPumps;
 
-extern gpio_in_t gpioTankStatus;
+extern gpio_in_t waterLevelLow;
 
 extern pwm_out_t pwmPHplusDose;
 extern pwm_out_t pwmPHplusRev;

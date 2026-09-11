@@ -15,8 +15,8 @@ inline Time minToTime(int minutes)
 State* activeSubState = nullptr;
 
 int cycle_time_minutes;
-int watering_minutes;
-int flush_minutes;
+int watering_seconds;
+int flush_seconds;
 int flush_delay_seconds = 20;
 int reverse_seconds = 10;
 int fertilize_seconds;
@@ -31,6 +31,7 @@ bool added_fertilizer{false};
 bool added_ph_plus{false};
 bool added_ph_minus{false};
 
+bool force_regulation{false};
 bool sensor_process{false};
 
 const Time FERTILIZER_LOCK  =  Time::hours(12);
@@ -76,8 +77,8 @@ task_t second_task          { "SECOND" };
 task_t sensor_proc_task     { "SENSOR_PROC" };
 
 inline Time getCycleTime()        { return minToTime(cycle_time_minutes); }
-inline Time getWateringTimeout()  { return minToTime(watering_minutes); }
-inline Time getFlushTimeout()     { return minToTime(flush_minutes); }
+inline Time getWateringTimeout()  { return Time::sec(watering_seconds); }
+inline Time getFlushTimeout()     { return Time::sec(flush_seconds); }
 inline Time getFlushDelayTimeout(){ return Time::sec(flush_delay_seconds); }
 inline Time getFertilizeTimeout() { return Time::sec(fertilize_seconds); }
 inline Time getPhTimeout()        { return Time::sec(ph_seconds); }
@@ -96,11 +97,13 @@ inline bool fertilizerNeeded()
 
 }
 
+inline bool phLower() {return phMeasure < (ph_regulator - ph_tolerance);}
+
 inline bool phPlusNeeded()        
 { 
     if(ph_plus_cycle > ph_plus_unlock)
     {
-        if(phMeasure < (ph_regulator - ph_tolerance))
+        if(phLower())
         {
             web_log(String("PH+ needed:\n\tcurrent=") + String(phMeasure, 2) + "\n\ttarget=" + String(ph_regulator, 2) + "\n\ttol=" + String(ph_tolerance, 2));
             return true;
@@ -109,11 +112,13 @@ inline bool phPlusNeeded()
     return false;
 }
 
+inline bool phHigher() {return phMeasure > (ph_regulator + ph_tolerance);}
+
 inline bool phMinusNeeded()       
 { 
     if(ph_minus_cycle > ph_minus_unlock)
     {
-        if(phMeasure > (ph_regulator + ph_tolerance))     
+        if(phHigher())
         {
           web_log(String("PH- needed:\n\tcurrent=") + String(phMeasure, 2) + "\n\ttarget=" + String(ph_regulator, 2) + "\n\ttol=" + String(ph_tolerance, 2));
           return true;
@@ -329,7 +334,8 @@ void fsm_t::transitionTo(State *next)
   const char* to = stateName();
   if (current)
   {
-    web_log(String("FSM: ") + from + " -> " + to);
+    // web_log(String("FSM: ") + from + " -> " + to);
+    web_log(String("state: ") + to);
     current->onEnter(*this);  
   }
 }
@@ -530,7 +536,7 @@ void MeasureEcState::exit(fsm_t &fsm)
     s.stopTask(t3_measure_ec_task);
     s.stopTask(sensor_proc_task);
     disableEc();
-    web_log("ec=" + String(ecMeasure, 2) + "vEc=" + String(vEcFilter.get(), 3));
+    web_log("ec= " + String(ecMeasure, 2) + "vEc= " + String(vEcFilter.get(), 3));
 }
 
 
@@ -585,7 +591,7 @@ void MeasurePhState::exit(fsm_t &fsm)
     s.stopTask(t3_measure_ph_task);
     s.stopTask(sensor_proc_task);
     disablePh();
-    web_log("ph=" + String(phMeasure, 2) + "vPh=" + String(vPhFilter.get(), 3));
+    web_log("ph= " + String(phMeasure, 2) + "vPh= " + String(vPhFilter.get(), 3));
 }
 
 
@@ -849,7 +855,7 @@ void Regulate3_FertilizerBState::exit(fsm_t &fsm)
     auto &s = fsm.scheduler();
 
     s.stopTask(t45_fertilize_task);
-
+    force_regulation = false;
     setPump(pumps_t::FERTILIZER_B, pump_dir::STOP);
 }
 
@@ -862,20 +868,28 @@ void Regulate3_FertilizerBState::update(fsm_t &fsm)
 
     if (done)
     {
-        if (phPlusNeeded())
+        if(!force_regulation)
         {
-            STATE_REG_PH.mode = PhMode::PLUS;
-            fsm.transitionTo(&STATE_REG_PH);
-        }
-        else if (phMinusNeeded())
-        {
-            STATE_REG_PH.mode = PhMode::MINUS;
-            fsm.transitionTo(&STATE_REG_PH);
+            if (phPlusNeeded())
+            {
+                STATE_REG_PH.mode = PhMode::PLUS;
+                fsm.transitionTo(&STATE_REG_PH);
+            }
+            else if (phMinusNeeded())
+            {
+                STATE_REG_PH.mode = PhMode::MINUS;
+                fsm.transitionTo(&STATE_REG_PH);
+            }
+            else
+            {
+                fsm.transitionTo(&STATE_FLUSH);
+            }
         }
         else
         {
             fsm.transitionTo(&STATE_FLUSH);
         }
+
     }
 }
 
@@ -894,6 +908,22 @@ void RegulatePhState::enter(fsm_t &fsm)
     ph_plus_cycle = 0;
     ph_minus_cycle = 0;
 
+    if(force_regulation)
+    {   
+        if (phHigher())
+        {
+            mode = PhMode::PLUS;
+        }
+        else if (phLower())
+        {
+             mode = PhMode::MINUS;
+        }
+        else
+        {
+            fsm.transitionTo(&STATE_IDLE);
+        }
+    }
+
     if (mode == PhMode::PLUS)
     {
         added_ph_plus = true; 
@@ -911,7 +941,7 @@ void RegulatePhState::exit(fsm_t &fsm)
     auto &s = fsm.scheduler();
 
     s.stopTask(t67_ph_task);
-
+    force_regulation = false;
     setPump(pumps_t::PH_PLUS, pump_dir::STOP);
     setPump(pumps_t::PH_MINUS, pump_dir::STOP);
 }
