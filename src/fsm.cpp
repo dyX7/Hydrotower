@@ -179,28 +179,28 @@ const char* fsm_t::stateName() const
   if (current == &STATE_STOP) return "STOP";
   if (current == &STATE_IDLE) return "IDLE";
 
-  if (current == &STATE_CALIBRATE_EC) return "CALIBRATE_EC";
-    if (current == &STATE_CALIBRATE_PH) return "CALIBRATE_PH";
+  if (current == &STATE_CALIBRATE_EC) return "CALIBRATE EC";
+    if (current == &STATE_CALIBRATE_PH) return "CALIBRATE PH";
   // ---------------- SUB STATES (MEASURE) ----------------
   if (current == &STATE_MEASURE) return "MEASURE";
-  if (current == &STATE_MEASURE_EC) return "MEASURE_EC";
-  if (current == &STATE_MEASURE_PH) return "MEASURE_PH";
+  if (current == &STATE_MEASURE_EC) return "MEASURE EC";
+  if (current == &STATE_MEASURE_PH) return "MEASURE PH";
   
   // ---------------- SUB STATES (FLUSH) ----------------
   if (current == &STATE_FLUSH) return "FLUSH";
   if (current == &STATE_FLUSH_PUMP) return "FLUSH_PUMP";
-  if (current == &STATE_FLUSH_WAIT) return "FLUSH_WAIT";
+  if (current == &STATE_FLUSH_WAIT) return "WAIT";
   if (current == &STATE_FLUSH_REVERSE) return "FLUSH_REVERSE";
   
   // ---------------- SUB STATES (WATERING) ----------------
   if (current == &STATE_WATERING) return "WATERING";
   if (current == &STATE_WATERING_PUMP) return "WATERING_PUMP";
-  if (current == &STATE_WATERING_WAIT) return "WATERING_WAIT";
+  if (current == &STATE_WATERING_WAIT) return "WAIT";
 
   // ---------------- SUB STATES (REGULATE) ----------------
   if (current == &STATE_REGULATE) return "REGULATE";
   if (current == &STATE_REG1_FERT_A) return "FERT_A";
-  if (current == &STATE_REG2_WAIT) return "REG_WAIT";
+  if (current == &STATE_REG2_WAIT) return "WAIT";
   if (current == &STATE_REG3_FERT_B) return "FERT_B";
   if (current == &STATE_REG_PH)
   {
@@ -706,7 +706,8 @@ void MeasureState::update(fsm_t &fsm)
         web_add_data_hist(
             ecMeasure,
             phMeasure,
-            tempMeasure);
+            tempMeasure,
+        true,true,true);
 
         if (calibration_valid() &&
             (fertilizerNeeded() ||

@@ -48,12 +48,34 @@ String logBuffer[LOG_SIZE];
 int logIndex = 0;
 
 // ---------------- HISTORY ----------------
+
 #define MAX_POINTS 1000
-float ec_hist[MAX_POINTS];
-float ph_hist[MAX_POINTS];
-float temp_hist[MAX_POINTS];
-int hist_index = 0;
+
+struct ec_point_t
+{
+  float value;
+  bool added{false};
+};
+
+struct ph_point_t
+{
+  float value;
+  bool up{false};
+  bool down{false};
+};
+
+struct hist_point_t
+{
+  ec_point_t ec;
+  ph_point_t ph;
+  float temp;
+};
+
+hist_point_t hist[MAX_POINTS];
+
+uint32_t hist_index = 0;
 bool hist_full = false;
+
 void saveHistory(bool log = true);
 void loadHistory();
 
@@ -119,11 +141,22 @@ void web_pumps(pumps_t pump, pump_dir dir, float duty)
 // ==================================================
 // DATA BUFFER
 // ==================================================
-void web_add_data_hist(float ec_v, float ph_v, float temp)
+void web_add_data_hist(
+  float ec_v,
+  float ph_v,
+  float temp,
+  bool ec_added,
+  bool ph_up,
+  bool ph_down)
 {
-  ec_hist[hist_index] = ec_v;
-  ph_hist[hist_index] = ph_v;
-  temp_hist[hist_index] = temp;
+  hist[hist_index].ec.value = ec_v;
+  hist[hist_index].ec.added = ec_added;
+
+  hist[hist_index].ph.value = ph_v;
+  hist[hist_index].ph.up = ph_up;
+  hist[hist_index].ph.down = ph_down;
+
+  hist[hist_index].temp = temp;
 
   hist_index++;
 
@@ -136,10 +169,9 @@ void web_add_data_hist(float ec_v, float ph_v, float temp)
   }
 
   web_log(String("HIST idx=") + hist_index +
-          " ec= " + String(ec_v, 2) +
-          " ph= " + String(ph_v, 2) +
-          " t= " + String(temp, 2));
-  
+          " ec=" + String(ec_v, 2) +
+          " ph=" + String(ph_v, 2) +
+          " t=" + String(temp, 2));
 }
 
 void saveCalibrationPh1()
@@ -210,7 +242,8 @@ void clearEcHistory()
 {
     for (int i = 0; i < MAX_POINTS; i++)
     {
-        ec_hist[i] = 0.0f;
+        hist[i].ec.value = 0.0f;
+        hist[i].ec.added = false;
     }
 
     saveHistory(false);
@@ -220,7 +253,9 @@ void clearPhHistory()
 {
     for (int i = 0; i < MAX_POINTS; i++)
     {
-        ph_hist[i] = 0.0f;
+        hist[i].ph.value = 0.0f;
+        hist[i].ph.up = false;
+        hist[i].ph.down = false;
     }
 
     saveHistory(false);
@@ -233,9 +268,7 @@ void saveHistory(bool log)
 {
   prefs.begin("history", false);
 
-  prefs.putBytes("ec_hist", ec_hist, sizeof(ec_hist));
-  prefs.putBytes("ph_hist", ph_hist, sizeof(ph_hist));
-  prefs.putBytes("tmp_hist", temp_hist, sizeof(temp_hist));
+  prefs.putBytes("hist", hist, sizeof(hist));
 
   prefs.putBool("full", hist_full);
   prefs.putInt("index", hist_index);
@@ -246,9 +279,9 @@ void saveHistory(bool log)
   {
     web_log(
       "History saved\n\tpoints=" + String(MAX_POINTS) +
-      "\n\tec=" + String(ec_hist[0], 2) +
-      "\n\tph=" + String(ph_hist[0], 2) +
-      "\n\ttemp=" + String(temp_hist[0], 2)
+      "\n\tec=" + String(hist[0].ec.value, 2) +
+      "\n\tph=" + String(hist[0].ph.value, 2) +
+      "\n\ttemp=" + String(hist[0].temp, 2)
     );
   }
 }
@@ -260,27 +293,22 @@ void loadHistory()
 {
   prefs.begin("history", true);
 
-  size_t ecSize  = prefs.getBytesLength("ec_hist");
-  size_t phSize  = prefs.getBytesLength("ph_hist");
-  size_t tmpSize = prefs.getBytesLength("tmp_hist");
+  size_t histSize = prefs.getBytesLength("hist");
 
-  if(ecSize == sizeof(ec_hist))
+  if(histSize == sizeof(hist))
   {
-    prefs.getBytes("ec_hist", ec_hist, sizeof(ec_hist));
+    prefs.getBytes("hist", hist, sizeof(hist));
+  }
+  else
+  {
+    // No valid stored history
+    memset(hist, 0, sizeof(hist));
+    hist_index = 0;
+    hist_full = false;
   }
 
-  if(phSize == sizeof(ph_hist))
-  {
-    prefs.getBytes("ph_hist", ph_hist, sizeof(ph_hist));
-  }
-
-  if(tmpSize == sizeof(temp_hist))
-  {
-    prefs.getBytes("tmp_hist", temp_hist, sizeof(temp_hist));
-  }
-
-  hist_full = prefs.getBool("full", false);
-  hist_index = prefs.getInt("index", 0);
+  hist_full = prefs.getBool("full", hist_full);
+  hist_index = prefs.getInt("index", hist_index);
 
   prefs.end();
 
@@ -290,9 +318,9 @@ void loadHistory()
 
     web_log(
       "Load History\n\tpoints=" + String(MAX_POINTS) +
-      "\n\tec=" + String(ec_hist[0], 2) +
-      "\n\tph=" + String(ph_hist[0], 2) +
-      "\n\ttemp=" + String(temp_hist[0], 2)
+      "\n\tec=" + String(hist[0].ec.value, 2) +
+      "\n\tph=" + String(hist[0].ph.value, 2) +
+      "\n\ttemp=" + String(hist[0].temp, 2)
     );
   }
 }
@@ -2231,15 +2259,18 @@ let chartEC = new Chart(document.getElementById('chartEC'), {
         borderDash: [8, 4]
       },
 
-      {
-        label: 'Regulate',
-        data: [],
-        borderColor: '#000000',
-        borderWidth: 0.5,
-        pointRadius: 0,
-        tension: 0,
-        borderDash: [3, 3]
-      }
+{
+  label: 'Regulate',
+  data: [],
+  borderColor: '#000000',
+  borderWidth: 0.5,
+  pointRadius: [],
+  pointHoverRadius: 42,
+  pointBackgroundColor: '#000000',
+  pointBorderColor: '#000000',
+  tension: 0,
+  borderDash: [3, 3]
+}
 
     ]
   },
@@ -2261,8 +2292,8 @@ let chartEC = new Chart(document.getElementById('chartEC'), {
 
     scales: {
       y: {
-        min: 0,
-        max: 3.0,
+        min: 1,
+        max: 2.5,
 
         title: {
           display: true,
@@ -2332,25 +2363,31 @@ let chartPH = new Chart(document.getElementById('chartPH'), {
         borderDash: [8, 4]
       },
 
-      {
-        label: 'Regulate',
-        data: [],
-        borderColor: '#000000',
-        borderWidth: 0.5,
-        pointRadius: 0,
-        tension: 0,
-        borderDash: [3, 3]
-      },
+{
+  label: 'Regulate',
+  data: [],
+  borderColor: '#000000',
+  borderWidth: 0.5,
+  pointRadius: [],
+  pointHoverRadius: 4,
+  pointBackgroundColor: '#000000',
+  pointBorderColor: '#000000',
+  tension: 0,
+  borderDash: [3, 3]
+},
 
-      {
-        label: '',
-        data: [],
-        borderColor: '#000000',
-        borderWidth: 0.5,
-        pointRadius: 0,
-        tension: 0,
-        borderDash: [3, 3]
-      }
+{
+  label: '',
+  data: [],
+  borderColor: '#000000',
+  borderWidth: 0.5,
+  pointRadius: [],
+  pointHoverRadius: 4,
+  pointBackgroundColor: '#000000',
+  pointBorderColor: '#000000',
+  tension: 0,
+  borderDash: [3, 3]
+}
 
     ]
   },
@@ -2373,7 +2410,7 @@ let chartPH = new Chart(document.getElementById('chartPH'), {
     scales: {
       y: {
         min: 4,
-        max: 9,
+        max: 8,
 
         title: {
           display: true,
@@ -2454,7 +2491,7 @@ let chartTEMP = new Chart(document.getElementById('chartTEMP'), {
     scales: {
       y: {
         min: 4,
-        max: 30,
+        max: 40,
 
         title: {
           display: true,
@@ -2699,7 +2736,7 @@ async function update()
     if(d.labels && d.ec_hist)
     {
       let cycleMin = parseInt(document.getElementById('idle').value) || 1;
-      let maxPoints = Math.floor((72 * 60) / cycleMin);
+      let maxPoints = Math.floor((168 * 60) / cycleMin);
 
       let labels = d.labels.slice(-maxPoints);
       let ec = d.ec_hist.slice(-maxPoints);
@@ -2710,8 +2747,13 @@ async function update()
       chartEC.data.datasets[1].data =
         labels.map(() => (d.ecReg ?? 0));
 
-      chartEC.data.datasets[2].data =
-        labels.map(() => (d.ecReg ?? 0) - (d.ecTol ?? 0));
+chartEC.data.datasets[2].data =
+  labels.map(() => (d.ecReg ?? 0) - (d.ecTol ?? 0));
+
+chartEC.data.datasets[2].pointRadius =
+  d.ec_added
+    ? d.ec_added.slice(-maxPoints).map(v => v ? 2 : 0)
+    : labels.map(() => 0);
 
       chartEC.update();
     }
@@ -2719,22 +2761,54 @@ async function update()
     if(d.labels && d.ph_hist)
     {
       let cycleMin = parseInt(document.getElementById('idle').value) || 1;
-      let maxPoints = Math.floor((72 * 60) / cycleMin);
+      let maxPoints = Math.floor((168 * 60) / cycleMin);
 
       let labels = d.labels.slice(-maxPoints);
       let ph = d.ph_hist.slice(-maxPoints);
 
-      chartPH.data.labels = labels;
-      chartPH.data.datasets[0].data = ph;
+chartPH.data.labels = labels;
+chartPH.data.datasets[0].data = ph;
 
-      chartPH.data.datasets[1].data =
-        labels.map(() => (d.phReg ?? 0));
+chartPH.data.datasets[1].data =
+  labels.map(() => (d.phReg ?? 0));
 
-      chartPH.data.datasets[2].data =
-        labels.map(() => (d.phReg ?? 0) + (d.phTol ?? 0));
 
-      chartPH.data.datasets[3].data =
-        labels.map(() => (d.phReg ?? 0) - (d.phTol ?? 0));
+// ================= PH REGULATION LINES =================
+
+// Upper line = target + tolerance
+chartPH.data.datasets[2].data =
+  labels.map(() => (d.phReg ?? 0) + (d.phTol ?? 0));
+
+// Lower line = target - tolerance
+chartPH.data.datasets[3].data =
+  labels.map(() => (d.phReg ?? 0) - (d.phTol ?? 0));
+
+
+// ================= PH REGULATION DOTS =================
+
+const phUp =
+  d.ph_up
+    ? d.ph_up.slice(-maxPoints)
+    : [];
+
+const phDown =
+  d.ph_down
+    ? d.ph_down.slice(-maxPoints)
+    : [];
+
+
+// UP -> LOWER LINE
+chartPH.data.datasets[3].pointRadius =
+  labels.map((_, i) =>
+    phUp[i] ? 2 : 0
+  );
+
+
+// DOWN -> UPPER LINE
+chartPH.data.datasets[2].pointRadius =
+  labels.map((_, i) =>
+    phDown[i] ? 2 : 0
+  );
 
       chartPH.update();
     }
@@ -2742,7 +2816,7 @@ async function update()
     if(d.labels && d.temp_hist)
     {
       let cycleMin = parseInt(document.getElementById('idle').value) || 1;
-      let maxPoints = Math.floor((72 * 60) / cycleMin);
+      let maxPoints = Math.floor((168 * 60) / cycleMin);
 
       chartTEMP.data.labels = d.labels.slice(-maxPoints);
       chartTEMP.data.datasets[0].data = d.temp_hist.slice(-maxPoints);
@@ -3052,13 +3126,29 @@ String buildJson()
     int start = hist_full ? hist_index : 0;
     int idx = (start + i) % MAX_POINTS;
 
-    json += String(ec_hist[idx], 2);
+    json += String(hist[idx].ec.value, 2);
 
     if(i < count - 1)
       json += ",";
   }
 
   json += "],";
+
+  // EC regulation events
+json += "\"ec_added\":[";
+
+for(int i = 0; i < count; i++)
+{
+  int start = hist_full ? hist_index : 0;
+  int idx = (start + i) % MAX_POINTS;
+
+  json += hist[idx].ec.added ? "true" : "false";
+
+  if(i < count - 1)
+    json += ",";
+}
+
+json += "],";
 
   // PH history
   json += "\"ph_hist\":[";
@@ -3068,13 +3158,45 @@ String buildJson()
     int start = hist_full ? hist_index : 0;
     int idx = (start + i) % MAX_POINTS;
 
-    json += String(ph_hist[idx], 2);
+    json += String(hist[idx].ph.value, 2);
 
     if(i < count - 1)
       json += ",";
   }
 
   json += "],";
+
+// PH regulation UP events
+json += "\"ph_up\":[";
+
+for(int i = 0; i < count; i++)
+{
+  int start = hist_full ? hist_index : 0;
+  int idx = (start + i) % MAX_POINTS;
+
+  json += hist[idx].ph.up ? "true" : "false";
+
+  if(i < count - 1)
+    json += ",";
+}
+
+json += "],";
+
+// PH regulation DOWN events
+json += "\"ph_down\":[";
+
+for(int i = 0; i < count; i++)
+{
+  int start = hist_full ? hist_index : 0;
+  int idx = (start + i) % MAX_POINTS;
+
+  json += hist[idx].ph.down ? "true" : "false";
+
+  if(i < count - 1)
+    json += ",";
+}
+
+json += "],";
 
   // Temperature history
   json += "\"temp_hist\":[";
@@ -3083,13 +3205,15 @@ String buildJson()
     int start = hist_full ? hist_index : 0;
     int idx = (start + i) % MAX_POINTS;
 
-    json += String(temp_hist[idx], 2);
+    json += String(hist[idx].temp, 2);
 
     if(i < count - 1)
       json += ",";
   }
 
   json += "]";
+
+
 
   // CLOSE JSON OBJECT
   json += "}";

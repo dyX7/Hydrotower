@@ -51,22 +51,24 @@ gpio_out_t gpioEcMeasure2{gpioEc2};
 
 gpio_out_t gpioMainPump{pinRelaisMainPump};
 
-pwm_out_t pwmPHplusDose(pinPwmMot2Dose, 1,  MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
-pwm_out_t pwmPHplusRev(pinPwmMot2Rev, 2,    MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
-pwm_out_t pwmPHminusDose(pinPwmMot3Dose, 3, MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
-pwm_out_t pwmPHminusRev(pinPwmMot3Rev, 4,   MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
-pwm_out_t pwmFertilizerADose(pinPwmMot4Dose, 5, MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
-pwm_out_t pwmFertilizerARev(pinPwmMot4Rev, 6,   MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
-pwm_out_t pwmFertilizerBDose(pinPwmMot5Dose, 7, MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
-pwm_out_t pwmFertilizerBRev(pinPwmMot5Rev, 8,   MOTOR_PWM_FREQ, 8, MOTOR_DUTY_PERCENT, false);
+pwm_out_t pwmPHplusDose(pinPwmMot2Dose, 1,  MOTOR_PWM_FREQ, 8, ph_plus_duty, false);
+pwm_out_t pwmPHplusRev(pinPwmMot2Rev, 2,    MOTOR_PWM_FREQ, 8, ph_plus_duty, false);
+pwm_out_t pwmPHminusDose(pinPwmMot3Dose, 3, MOTOR_PWM_FREQ, 8, ph_minus_duty, false);
+pwm_out_t pwmPHminusRev(pinPwmMot3Rev, 4,   MOTOR_PWM_FREQ, 8, ph_minus_duty, false);
+pwm_out_t pwmFertilizerADose(pinPwmMot4Dose, 5, MOTOR_PWM_FREQ, 8, fertilizer_a_duty, false);
+pwm_out_t pwmFertilizerARev(pinPwmMot4Rev, 6,   MOTOR_PWM_FREQ, 8, fertilizer_a_duty, false);
+pwm_out_t pwmFertilizerBDose(pinPwmMot5Dose, 7, MOTOR_PWM_FREQ, 8, fertilizer_b_duty, false);
+pwm_out_t pwmFertilizerBRev(pinPwmMot5Rev, 8,   MOTOR_PWM_FREQ, 8, fertilizer_b_duty, false);
 
 
 // ---------------- Constants ----------------
 const float VREF = 3.3;
 const float TEMP0_K = 298.15;
 const uint32_t MOTOR_PWM_FREQ = 2000;
-const float MOTOR_DUTY_PERCENT = 0.9f;
-
+float ph_plus_duty = 0.7f;
+float ph_minus_duty = 0.7f;
+float fertilizer_a_duty = 0.7f;
+float fertilizer_b_duty = 0.7f;
 
 // ---------------- Calibration Defaults ----------------
 cal_point_t ph_cal_1 {7.0, 2.2, 25.0};

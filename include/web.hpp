@@ -7,7 +7,13 @@ void web_init();
 void web_loop();
 
 // data logging
-void web_add_data_hist(float ec, float ph, float temp);
+void web_add_data_hist(
+  float ec_v,
+  float ph_v,
+  float temp,
+  bool ec_added,
+  bool ph_up,
+  bool ph_down);
 extern void clearEcHistory();
 extern void clearPhHistory();
 void web_log(const String &msg);

@@ -77,7 +77,10 @@ struct cal_point_t {
 extern const float VREF;
 extern const float TEMP0_K;
 extern const uint32_t MOTOR_PWM_FREQ;
-extern const float MOTOR_DUTY_PERCENT;
+extern float ph_plus_duty;
+extern float ph_minus_duty;
+extern float fertilizer_a_duty;
+extern float fertilizer_b_duty;
 
 // ---------------- Calibration Defaults ----------------
 extern cal_point_t ph_cal_1;
